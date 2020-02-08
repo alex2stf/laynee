@@ -58,6 +58,15 @@ public class ServerService extends Service {
 
 
 
+        serverHandler.beforeLiveWAV(new WelandServerHandler.Handler<HttpRequest>() {
+            @Override
+            public HttpResponse handle(HttpRequest data) {
+                if (!wavRecorderResponse.isRecording()){
+                    wavRecorderResponse.startRecord();
+                }
+                return null;
+            }
+        });
 
         serverHandler.beforeLiveJPEG(new WelandServerHandler.Handler<HttpRequest>() {
             @Override
@@ -96,18 +105,7 @@ public class ServerService extends Service {
 
 
 
-        serverHandler.onPlayAdvice(new CompleteHandler<ContentInfo>() {
-            @Override
-            public void onComplete(ContentInfo data) {
-                if (data == null){
-                    return;
-                }
-                Intent brodcastMsg = new Intent();
-                brodcastMsg.setAction("playAdvice");
-                brodcastMsg.putExtra("path", data.getPath());
-                sendBroadcast(brodcastMsg);
-            }
-        });
+
 
 
     }
@@ -193,12 +191,6 @@ public class ServerService extends Service {
         super.onDestroy();
     }
 
-
-//    void startNativeVideo(String path){
-//        Intent intent = new Intent(Intent.ACTION_VIEW );
-//        intent.setDataAndType(Uri.parse(path), "video/*");
-//        startActivity(intent);
-//    }
 
 
 

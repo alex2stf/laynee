@@ -4,9 +4,12 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.graphics.Color;
+import android.text.Layout;
 import android.view.Gravity;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.GridView;
 import android.widget.ImageButton;
@@ -17,6 +20,7 @@ import android.widget.TextView;
 
 import com.arise.core.tools.CollectionUtil;
 import com.arise.core.tools.models.CompleteHandler;
+import com.arise.rapdroid.RAPDUtils;
 import com.arise.rapdroid.media.server.Icons;
 import com.arise.rapdroid.media.server.R;
 import com.arise.weland.dto.ContentInfo;
@@ -41,6 +45,7 @@ public class MediaDisplayer extends LinearLayout implements View.OnClickListener
     PopupMenu popupMenu;
     TextView title;
     LinearLayout top;
+    LinearLayout topLeft;
 
     public MediaDisplayer(Context context, int defaultRes) {
         super(context);
@@ -52,55 +57,18 @@ public class MediaDisplayer extends LinearLayout implements View.OnClickListener
 
         top = new LinearLayout(context);
         top.setOrientation(HORIZONTAL);
+
+        topLeft = new LinearLayout(context);
+        topLeft.setOrientation(HORIZONTAL);
+        topLeft.setGravity(Gravity.CENTER|Gravity.RIGHT);
+
         SearchView searchView = new SearchView(context);
 
+        top.addView(searchView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, 0.5f));
+        top.addView(topLeft, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, 0.5f));
 
 
 
-        //TODO parameter
-        ImageButton menuBtn = new ImageButton(context);
-        menuBtn.setImageResource(R.drawable.ic_menu_media);
-//        menuBtn.setBackgroundColor(Color.RED);
-
-
-        popupMenu = new PopupMenu(context, menuBtn);
-
-        popupMenu.getMenu().add("Size");
-        View self = this;
-
-        popupMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
-            @Override
-            public boolean onMenuItemClick(MenuItem menuItem) {
-                if (actions.containsKey(menuItem)){
-                    actions.get(menuItem).onClick(menuItem);
-                }
-                return false;
-            }
-        });
-
-        /**\
-         * optional:
-         */
-
-
-        menuBtn.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                InputMethodManager imm = (InputMethodManager) v.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-                imm.hideSoftInputFromWindow(v.getWindowToken(), 0);
-                popupMenu.show();
-            }
-        });
-
-
-        top.addView(searchView);
-
-//        top.addView(menuBtn);  //TODO optional
-
-
-
-//        top.setGravity(Gravity.RIGHT);  //TODO based on number of titles
-//        top.setPadding(130, 0, 0, 0);
 
         addView(top, Layouts.matchParentWrapContent());
 
@@ -141,16 +109,51 @@ public class MediaDisplayer extends LinearLayout implements View.OnClickListener
         return this;
     }
 
-    public void setTitle(String text) {
+    public MediaDisplayer setTitle(String text, int textColor) {
         title = new TextView(getContext());
         title.setText(text);
         title.setGravity(Gravity.CENTER_VERTICAL);
-        title.setTextColor(Icons.tab1Background);
+        title.setTextColor(textColor);
 
-        title.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+//        title.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
         title.setPadding(0, 0, 20, 0);
 
-        top.addView(title, Layouts.matchParentMatchParent()); //TODO optional
+        topLeft.addView(title, Layouts.wrapContentMatchParent()); //TODO optional
+        return this;
+    }
+
+    public MediaDisplayer enableMenu(int iconResource){
+        ImageButton menuBtn = new ImageButton(context);
+        menuBtn.setImageResource(R.drawable.ic_menu_light);
+        menuBtn.setBackgroundColor(Color.TRANSPARENT);
+
+        popupMenu = new PopupMenu(context, menuBtn);
+        popupMenu.getMenu().add("Size");
+
+        popupMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
+            @Override
+            public boolean onMenuItemClick(MenuItem menuItem) {
+                if (actions.containsKey(menuItem)){
+                    actions.get(menuItem).onClick(menuItem);
+                }
+                return false;
+            }
+        });
+
+        /**\
+         * optional:
+         */
+
+
+        menuBtn.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                RAPDUtils.hideKeyboard(v);
+                popupMenu.show();
+            }
+        });
+        topLeft.addView(menuBtn);
+        return this;
     }
 
 
@@ -181,7 +184,6 @@ public class MediaDisplayer extends LinearLayout implements View.OnClickListener
     }
 
 
-//    Map<MediaIcon, AlertDialog> cachedDialogs = new HashMap<>();
 
     AlertDialog buildDialog(MediaIcon icon){
         String titles[] = new String[options.size()];
@@ -189,8 +191,7 @@ public class MediaDisplayer extends LinearLayout implements View.OnClickListener
             titles[i] = options.get(i).getTitle(icon.getMediaInfo());
         }
         AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
-//        builder.setTitle("Select option");
-        builder.setTitle("P:" +icon.getMediaInfo().getPath());
+        builder.setTitle("P:" + icon.getMediaInfo().getPath());
         builder.setItems(titles, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialogInterface, int i) {

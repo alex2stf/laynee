@@ -29,9 +29,13 @@ import com.arise.rapdroid.media.server.R;
 import com.arise.weland.dto.ContentInfo;
 import com.arise.rapdroid.components.ContextFragment;
 import com.arise.rapdroid.media.server.views.MyVideoView;
+import com.arise.weland.dto.Playlist;
 
 import java.util.HashMap;
 import java.util.Map;
+
+import static com.arise.rapdroid.media.server.AppUtil.AUTO_PLAY_VIDEOS;
+import static com.arise.rapdroid.media.server.AppUtil.PLAYBACK_STATE;
 
 public class MediaPlaybackFragment extends ContextFragment {
 
@@ -55,7 +59,7 @@ public class MediaPlaybackFragment extends ContextFragment {
     ThreadUtil.TimerResult updateTimer;
     ContentInfo currentInfo;
     int state;
-
+    View mediaControls;
 
     MediaPlayer.OnCompletionListener onCompletionListener = new MediaPlayer.OnCompletionListener() {
         @Override
@@ -69,6 +73,9 @@ public class MediaPlaybackFragment extends ContextFragment {
             clearState();
             state = STOPPED;
             AppCache.putInt("playback-state", state);
+            if (AppCache.getBoolean(AUTO_PLAY_VIDEOS)){
+                startVideosAutoplay();
+            }
         }
     };
     Map<String, Drawable> arts = new HashMap<>();
@@ -118,7 +125,8 @@ public class MediaPlaybackFragment extends ContextFragment {
            videoView.setLayoutParams(getParams());
            root.addView(musicImage, new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-           View mediaControls = inflater.inflate(R.layout.new_app_widget, null);
+
+           mediaControls = inflater.inflate(R.layout.new_app_widget, null);
 
            RelativeLayout.LayoutParams params =
                    new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -171,6 +179,15 @@ public class MediaPlaybackFragment extends ContextFragment {
                 showPlayButton();
             }
         }
+        else if(currentInfo.isVideo() ){
+            if (state == PLAYING_VIDEO || AppCache.getBoolean(AUTO_PLAY_VIDEOS)) {
+                play(currentInfo);
+                showVideoFragment();
+            }
+        }
+        else {
+            System.out.println("CURRENT INFO CANNOT BE PLAYED");
+        }
     }
 
     private void resumePlayer() {
@@ -205,22 +222,25 @@ public class MediaPlaybackFragment extends ContextFragment {
             musicPlayer.pause();
             state = PAUSED_MUSIC;
         }
+        AppCache.putInt(PLAYBACK_STATE, state);
         ThreadUtil.closeTimer(updateTimer);
         showPlayButton();
         saveState();
     }
 
     private void showPauseButton(){
-        AppCache.putInt("playback-state", state);
+        AppCache.putInt(PLAYBACK_STATE, state);
         playBtn.setImageResource(android.R.drawable.ic_media_pause);
         playBtn.setEnabled(true);
         updateSeekBar();
     }
 
     private void showPlayButton(){
-        AppCache.putInt("playback-state", state);
-        playBtn.setImageResource(android.R.drawable.ic_media_play);
-        playBtn.setEnabled(true);
+        AppCache.putInt(PLAYBACK_STATE, state);
+        if(playBtn != null) {
+            playBtn.setImageResource(android.R.drawable.ic_media_play);
+            playBtn.setEnabled(true);
+        }
         updateSeekBar();
     }
 
@@ -394,7 +414,7 @@ public class MediaPlaybackFragment extends ContextFragment {
 
 
     public void playAdvice(ContentInfo contentInfo) {
-        if (videoView != null && !videoView.isPlaying()){
+        if (videoView != null && !videoView.isPlaying() && state == STOPPED && !AppCache.getBoolean(AUTO_PLAY_VIDEOS)){
             log.trace(" received advice " + contentInfo.getPath());
             play(contentInfo);
         }
@@ -403,6 +423,16 @@ public class MediaPlaybackFragment extends ContextFragment {
         }
     }
 
+
+    public void startVideosAutoplay() {
+        if (state != PLAYING_VIDEO) {
+            ContentInfo contentInfo = AppUtil.contentInfoProvider.next(Playlist.VIDEOS);
+            if (contentInfo != null) {
+                play(contentInfo);
+            }
+        }
+        showVideoFragment();
+    }
 
 
 }

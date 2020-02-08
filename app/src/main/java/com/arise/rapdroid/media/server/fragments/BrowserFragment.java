@@ -2,14 +2,21 @@ package com.arise.rapdroid.media.server.fragments;
 
 import android.app.AlertDialog;
 import android.content.DialogInterface;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.PopupMenu;
+import android.widget.RelativeLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -17,12 +24,17 @@ import androidx.fragment.app.Fragment;
 
 import com.arise.core.tools.AppCache;
 import com.arise.core.tools.Mole;
+import com.arise.core.tools.models.CompleteHandler;
 import com.arise.rapdroid.SmartWebView;
 import com.arise.rapdroid.media.server.AppUtil;
 import com.arise.rapdroid.media.server.Icons;
 import com.arise.rapdroid.media.server.appviews.SettingsView;
 import com.arise.rapdroid.media.server.R;
+import com.arise.weland.dto.ContentInfo;
+import com.arise.weland.dto.Playlist;
+import com.arise.weland.utils.URLBeautifier;
 
+import java.net.URLEncoder;
 import java.util.UUID;
 
 public class BrowserFragment extends Fragment {
@@ -39,14 +51,10 @@ public class BrowserFragment extends Fragment {
     SmartWebView smartWebView;
 
 
-    private String[][] predefined = new String[][]{
-            {"youtube", "https://www.youtube.com/"},
-            {"9gag", "https://9gag.com/"},
-            {"facebook", "https://www.facebook.com/"}
-    };
 
 
     private String currentUrl = "http://localhost:8221/health";
+
 
     @Nullable
     @Override
@@ -64,7 +72,6 @@ public class BrowserFragment extends Fragment {
 
             PopupMenu popupMenu = smartWebView.addSearchBar();
             Menu root = popupMenu.getMenu();
-            root.add("Navigate");
             root.add("Send to device");
             popupMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
                 @Override
@@ -73,36 +80,21 @@ public class BrowserFragment extends Fragment {
                         case "Send to device":
                             AppUtil.showSendUrlOptions(getContext(), settingsView, smartWebView.url());
                             break;
-                        case "Navigate":
-                            showNavigationOptions();
-                            break;
                     }
                     return false;
                 }
             });
             smartWebView.init();
             smartWebView.setId(UUID.randomUUID().version());
-            smartWebView.loadUrl(currentUrl);
-//            smartWebView.loadUrl("https://live.rockfm.ro:8443/rockfm.aacp");
+
+
+
+            loadUrl(currentUrl);
         }
         return smartWebView;
     }
 
-    private void showNavigationOptions(){
-        AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
-        builder.setTitle("Select page");
-        String names[] = new String[predefined.length];
-        for (int i = 0; i < predefined.length; i++){
-            names[i] = predefined[i][0];
-        }
-        builder.setItems(names, new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialogInterface, int i) {
-                smartWebView.loadUrl(predefined[i][1]);
-            }
-        });
-        builder.create().show();
-    }
+
 
 
 
@@ -122,4 +114,30 @@ public class BrowserFragment extends Fragment {
             smartWebView.goToPrevious();
         }
     }
+
+    public void loadUrl(String path) {
+        if (smartWebView != null){
+            ContentInfo contentInfo = AppUtil.contentInfoProvider.findByPath(path);
+            if (contentInfo != null){
+
+                if (contentInfo.isMusic() && Playlist.STREAMS.equals(contentInfo.getPlaylist())){
+                    //TODO configurable
+                    path = "http://localhost:8221/player?imgSrc=" + contentInfo.getThumbnailId()
+                            + "&audioSrc=" + contentInfo.getPath();
+                }
+
+
+
+
+                System.out.println(path);
+
+            }
+
+
+            smartWebView.loadUrl(path);
+            saveState();
+        }
+    }
+
+
 }

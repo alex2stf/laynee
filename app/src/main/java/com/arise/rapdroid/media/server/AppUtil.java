@@ -23,13 +23,18 @@ import java.net.URISyntaxException;
 
 public class AppUtil {
 
+    public static final String AUTO_PLAY_VIDEOS = "autovid233";
+    public static final String TAB_POSITION = "tab-position";
+    public static final String PLAYBACK_STATE = "playback-state";
+
+
 
     public static final AndroidContentDecoder DECODER = new AndroidContentDecoder();
     public static final ContentInfoProvider contentInfoProvider
             = new ContentInfoProvider(DECODER)
             .addRoot(Environment.getExternalStorageDirectory())
-            .get()
-            ;
+            .importJson("weland/config/commons/content-infos.json")
+            .get();
 
 
 

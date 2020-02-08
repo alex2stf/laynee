@@ -8,7 +8,6 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.graphics.Color;
-import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -36,6 +35,8 @@ import com.google.android.material.tabs.TabLayout;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.Map;
 
 import static android.Manifest.permission.ACCESS_WIFI_STATE;
@@ -48,6 +49,8 @@ import static android.Manifest.permission.READ_EXTERNAL_STORAGE;
 import static android.Manifest.permission.RECORD_AUDIO;
 import static android.Manifest.permission.VIBRATE;
 import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
+import static com.arise.rapdroid.media.server.AppUtil.AUTO_PLAY_VIDEOS;
+import static com.arise.rapdroid.media.server.AppUtil.TAB_POSITION;
 
 public class MainActivity extends RAPDroidActivity {
 
@@ -85,7 +88,6 @@ public class MainActivity extends RAPDroidActivity {
         @Override
         public void onReceive(Context context, Intent intent) {
             String path = intent.getStringExtra("path");
-
             File file = new File(path);
             if (file.exists()){
                 ContentInfo contentInfo = AppUtil.DECODER.decode(file);
@@ -95,24 +97,18 @@ public class MainActivity extends RAPDroidActivity {
                     showVideoFragment();
                 }
             }
-
-        }
-    };
-
-    BroadcastReceiver onPlayAdvice = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String path = intent.getStringExtra("path");
-            File file = new File(path);
-            if (file.exists()){
-                ContentInfo contentInfo = AppUtil.DECODER.decode(file);
-                //TODO check content type
-                if (contentInfo != null){
-                    mediaPlaybackFragment.playAdvice(contentInfo);
-                }
+            else if (isUrl(path)){
+                browserFragment.loadUrl(path);
+                showBrowserFragment();
             }
+
         }
     };
+
+
+
+
+
 
 
 
@@ -124,12 +120,12 @@ public class MainActivity extends RAPDroidActivity {
         AppCache.setWorker(worker);
 
 
-        tabPosition = AppCache.getInt("tab-position", 0);
+        tabPosition = AppCache.getInt(TAB_POSITION, 0);
         //start server
 
         startServerService();
 
-        if (AppCache.getBoolean("autoplayVideosOnStart")){
+        if (AppCache.getBoolean(AUTO_PLAY_VIDEOS)){
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
 
         }
@@ -163,6 +159,8 @@ public class MainActivity extends RAPDroidActivity {
         mediaCenterFragment = new MediaCenterFragment()
                         .setNeworkRefreshView(settingsView);
 
+
+        //binding
         mediaPlaybackFragment.setMediaCenter(mediaCenterFragment);
 
         viewPager = new ViewPager(this);
@@ -194,7 +192,6 @@ public class MainActivity extends RAPDroidActivity {
         this.registerReceiver(onStartServerReceiver, new IntentFilter("onStart"));
         this.registerReceiver(onMessageReceiver, new IntentFilter("onMessage"));
         this.registerReceiver(onOpenFileReceiver, new IntentFilter("openFile"));
-        this.registerReceiver(onPlayAdvice, new IntentFilter("playAdvice"));
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -253,11 +250,7 @@ public class MainActivity extends RAPDroidActivity {
 
         new SamsungDevice(this).discover();
 
-
-//        trySetTabColor(tabLayout.getTabAt(tabPosition), tabPosition);
         autoGoToTab(tabPosition);
-
-
     }
 
 
@@ -355,31 +348,29 @@ public class MainActivity extends RAPDroidActivity {
     protected void onPause() {
         mediaPlaybackFragment.saveState();
         browserFragment.saveState();
-        AppCache.putInt("tab-position", tabPosition);
+        AppCache.putInt(TAB_POSITION, tabPosition);
         super.onPause();
     }
 
     @Override
     protected void onStop() {
-        AppCache.putInt("tab-position", tabPosition);
+        AppCache.putInt(TAB_POSITION, tabPosition);
         mediaPlaybackFragment.saveState();
         browserFragment.saveState();
         safeUnregisterReceiver(onStartServerReceiver);
         safeUnregisterReceiver(onMessageReceiver);
         safeUnregisterReceiver(onOpenFileReceiver);
-        safeUnregisterReceiver(onPlayAdvice);
         super.onStop();
     }
 
     @Override
     protected void onDestroy() {
-        AppCache.putInt("tab-position", tabPosition);
+        AppCache.putInt(TAB_POSITION, tabPosition);
         mediaPlaybackFragment.saveState();
         browserFragment.saveState();
         safeUnregisterReceiver(onStartServerReceiver);
         safeUnregisterReceiver(onMessageReceiver);
         safeUnregisterReceiver(onOpenFileReceiver);
-        safeUnregisterReceiver(onPlayAdvice);
         super.onDestroy();
     }
 
@@ -410,17 +401,33 @@ public class MainActivity extends RAPDroidActivity {
         autoGoToTab(4);
     }
 
+    boolean isUrl(String s){
+        URL url;
+        try {
+            url = new URL(s);
+        } catch (MalformedURLException e) {
+            return false;
+        }
+        return url != null;
+    }
+
+    private void showBrowserFragment() {
+        autoGoToTab(1);
+    }
 
 
-    public void autoGoToTab(int index){
+    public synchronized void autoGoToTab(int index){
         if (tabInit){
             return;
         }
         tabInit = true;
         previousPosition = tabPosition;
+
         viewPager.postDelayed(new Runnable() {
             @Override
             public void run() {
+                tabPosition = index;
+                AppCache.putInt(TAB_POSITION, tabPosition);
                 viewPager.setCurrentItem(index, true);
                 tabInit = false;
             }

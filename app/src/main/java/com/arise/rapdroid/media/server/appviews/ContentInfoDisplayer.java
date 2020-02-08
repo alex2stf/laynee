@@ -9,6 +9,8 @@ import com.arise.core.tools.CollectionUtil;
 import com.arise.core.tools.Mole;
 import com.arise.core.tools.models.CompleteHandler;
 import com.arise.rapdroid.media.server.AppUtil;
+import com.arise.rapdroid.media.server.Icons;
+import com.arise.rapdroid.media.server.R;
 import com.arise.rapdroid.media.server.WelandClient;
 import com.arise.weland.dto.AutoplayMode;
 import com.arise.weland.dto.ContentInfo;
@@ -32,10 +34,10 @@ public class ContentInfoDisplayer extends MediaDisplayer {
     private AutoplayMode autoplayMode = AutoplayMode.off;
     MenuItem autoplayMenuItem;
 
-    public ContentInfoDisplayer(Context context, int defaultRes, Object worker, String id) {
+    public ContentInfoDisplayer(Context context, int defaultRes, Object worker, String playlistId, String title) {
         super(context, defaultRes);
         this.worker = worker;
-        this.playlistId = id;
+        this.playlistId = playlistId;
 
         gridView.setOnScrollListener(new AbsListView.OnScrollListener() {
             @Override
@@ -53,6 +55,8 @@ public class ContentInfoDisplayer extends MediaDisplayer {
         });
 
         fetchData();
+
+        setTitle(title, Icons.tab1Background);
 
 
 
@@ -72,56 +76,15 @@ public class ContentInfoDisplayer extends MediaDisplayer {
             }
         });
 
-        addMenu("Shuffle", new OnMenuClickListener() {
-            @Override
-            public void onClick(MenuItem menuItem) {
-                WelandClient.shuffle(worker, playlistId, new CompleteHandler() {
-                    @Override
-                    public void onComplete(Object data) {
-                        log.info("shuffle complete");
-                    }
-                });
-            }
-        });
 
 
 
-        autoplayMenuItem = addMenu("Autoplay on", new OnMenuClickListener() {
-            @Override
-            public void onClick(MenuItem view) {
-               AutoplayMode toSend;
-               if (AutoplayMode.off.equals(autoplayMode)){
-                   toSend = AutoplayMode.on;
-               }
-               else {
-                   toSend = AutoplayMode.off;
-               }
-               WelandClient.autoplay(worker, playlistId, toSend, new CompleteHandler() {
-                    @Override
-                    public void onComplete(Object data) {
-                        log.info("Autoplay response: " + data);
-                        autoplayMode = toSend;
-                        updateAutoplayText();
-                    }
-               });
-            }
-         });
-         updateAutoplayText();
+
     }
 
 
 
-    private void updateAutoplayText(){
-        if (autoplayMenuItem != null){
-           runOnUiThread(new Runnable() {
-               @Override
-               public void run() {
-                   String text = autoplayMode.equals(AutoplayMode.on) ? "Stop autoplay" : "Start autoplay";
-                   autoplayMenuItem.setTitle(text);
-               }
-           });
-        }
-    }
+
 
 
 
@@ -146,10 +109,6 @@ public class ContentInfoDisplayer extends MediaDisplayer {
                 List<ContentInfo> batch = data.getData();
                 currentIndex = data.getIndex();
                 dataLoadedLength += batch.size();
-                if (!data.getAutoplayMode().equals(autoplayMode)){
-                    autoplayMode = data.getAutoplayMode();
-                    updateAutoplayText();
-                }
                 log.info("CURRENT_INDEX = " + currentIndex + " from "
                         + WelandClient.getWorkerId(worker) + "/" + playlistId + " data loaded: " + dataLoadedLength +
                         " autoplay mode " + data.getAutoplayMode());
