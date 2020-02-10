@@ -191,7 +191,7 @@ public class MediaDisplayer extends LinearLayout implements View.OnClickListener
             titles[i] = options.get(i).getTitle(icon.getMediaInfo());
         }
         AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
-        builder.setTitle("P:" + icon.getMediaInfo().getPath());
+        builder.setTitle(icon.getMediaInfo().getTitle());
         builder.setItems(titles, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialogInterface, int i) {

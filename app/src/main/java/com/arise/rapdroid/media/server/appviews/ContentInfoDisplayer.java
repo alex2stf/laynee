@@ -1,9 +1,12 @@
 package com.arise.rapdroid.media.server.appviews;
 
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.graphics.Bitmap;
 import android.view.MenuItem;
 import android.widget.AbsListView;
+import android.widget.TextView;
 
 import com.arise.core.tools.CollectionUtil;
 import com.arise.core.tools.Mole;
@@ -31,8 +34,8 @@ public class ContentInfoDisplayer extends MediaDisplayer {
     private volatile int dataLoadedLength = 0;
     private static final int MIN_INIT_DATA_SIZE = 20;
 
-    private AutoplayMode autoplayMode = AutoplayMode.off;
-    MenuItem autoplayMenuItem;
+//    private AutoplayMode autoplayMode = AutoplayMode.off;
+//    MenuItem autoplayMenuItem;
 
     public ContentInfoDisplayer(Context context, int defaultRes, Object worker, String playlistId, String title) {
         super(context, defaultRes);
@@ -75,6 +78,30 @@ public class ContentInfoDisplayer extends MediaDisplayer {
                 }
             }
         });
+
+        addOption(new Option() {
+            @Override
+            public String getTitle(ContentInfo info) {
+                return "Details";
+            }
+
+            @Override
+            public void onClick(ContentInfo info) {
+                AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+                builder.setTitle(info.getTitle());
+                TextView textView =new TextView(getContext());
+                textView.setText(info.getPath() + "\n" + info.getThumbnailId());
+                builder.setView(textView);
+                builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int i) {
+
+                    }
+                });
+                 builder.create().show();
+            }
+        });
+
 
 
 

@@ -164,6 +164,10 @@ public class WelandClient {
         getClient(worker).autoplay(Playlist.find(playlistId), autoplayMode, onComplete);
     }
 
+    public static void stop(ContentInfo info, Object worker) {
+        getClient(worker).close(info.getPath());
+    }
+
 
     public static class MessageResponse {
        public Message message;

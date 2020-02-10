@@ -15,10 +15,12 @@ import com.arise.core.tools.AppCache;
 import com.arise.core.tools.models.CompleteHandler;
 import com.arise.rapdroid.media.server.AppUtil;
 import com.arise.rapdroid.media.server.R;
+import com.arise.rapdroid.media.server.WelandClient;
 import com.arise.rapdroid.media.server.appviews.ContentInfoDisplayer;
 import com.arise.rapdroid.media.server.Icons;
 import com.arise.rapdroid.media.server.appviews.SettingsView;
 import com.arise.rapdroid.media.server.views.MediaDisplayer;
+import com.arise.weland.dto.ContentInfo;
 import com.arise.weland.dto.Playlist;
 import com.arise.weland.dto.RemoteConnection;
 import com.arise.rapdroid.components.ContextFragment;
@@ -161,6 +163,18 @@ public class MediaCenterFragment extends ContextFragment {
             @Override
             public void onClick(MenuItem menuItem) {
                 root.removeTab(displayer);
+            }
+        });
+
+        displayer.addOption(new MediaDisplayer.Option() {
+            @Override
+            public String getTitle(ContentInfo info) {
+                return "Stop";
+            }
+
+            @Override
+            public void onClick(ContentInfo info) {
+                WelandClient.stop(info, data.getPayload());
             }
         });
         root.addMenu(R.drawable.ic_local_music, R.drawable.ic_send, data.getDeviceStat().getDisplayName(), displayer);
