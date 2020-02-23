@@ -68,4 +68,8 @@ public class SubmitMessageView extends LinearLayout {
         editText.setEnabled(true);
         submitBtn.setEnabled(true);
     }
+
+    public void setText(String text){
+        editText.setText(text);
+    }
 }

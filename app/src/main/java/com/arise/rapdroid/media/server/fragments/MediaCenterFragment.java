@@ -7,17 +7,21 @@ import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageButton;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.arise.core.tools.AppCache;
+import com.arise.core.tools.ThreadUtil;
 import com.arise.core.tools.models.CompleteHandler;
+import com.arise.rapdroid.components.MediaControls;
 import com.arise.rapdroid.media.server.AppUtil;
+import com.arise.rapdroid.media.server.MainActivity;
 import com.arise.rapdroid.media.server.R;
 import com.arise.rapdroid.media.server.WelandClient;
 import com.arise.rapdroid.media.server.appviews.ContentInfoDisplayer;
 import com.arise.rapdroid.media.server.Icons;
+import com.arise.rapdroid.media.server.appviews.TouchPadView;
 import com.arise.rapdroid.media.server.appviews.SettingsView;
 import com.arise.rapdroid.media.server.views.MediaDisplayer;
 import com.arise.weland.dto.ContentInfo;
@@ -29,7 +33,7 @@ import com.arise.rapdroid.components.ui.NavView;
 import java.net.URI;
 import java.net.URISyntaxException;
 
-import static com.arise.rapdroid.media.server.AppUtil.AUTO_PLAY_VIDEOS;
+
 
 public class MediaCenterFragment extends ContextFragment {
     private MediaPlaybackFragment mediaPlaybackFragment;
@@ -37,6 +41,7 @@ public class MediaCenterFragment extends ContextFragment {
 
 
     private SettingsView settingsView;
+    private MainActivity mainActivity;
 
     public MediaCenterFragment(){
 
@@ -56,11 +61,35 @@ public class MediaCenterFragment extends ContextFragment {
 
     ContentInfoDisplayer localMusic;
     ContentInfoDisplayer localVideos;
-    boolean autoplayVideos = false;
+    MenuItem autoVideoItem;
+    MenuItem autoMusicItem;
 
 
-    String getText(){
-        return autoplayVideos ? "Autoplay off" : "Autoplay on";
+    String getAutoplayVideosText(){
+        return AppUtil.isAutoplayVideos() ? "Autoplay off" : "Autoplay on";
+    }
+
+    String getAutoplayMusicText(){
+        return AppUtil.isAutoplayMusic() ? "Autoplay music off" : "Autoplay music on";
+    }
+
+    //TODO meke this once:
+    static String[] playlists = Playlist.displayableNames();
+    static String[] names = new String[playlists.length + 1];
+    static {
+        for(int i = 0; i < playlists.length; i++){
+            names[i] = playlists[i];
+        }
+        names[names.length - 1] = "CONTROL";
+    }
+
+    private void updateMenuItems(){
+        if (autoVideoItem != null){
+            autoVideoItem.setTitle(getAutoplayVideosText());
+        }
+        if (autoMusicItem != null){
+            autoMusicItem.setTitle(getAutoplayMusicText());
+        }
     }
 
     @Nullable
@@ -84,21 +113,38 @@ public class MediaCenterFragment extends ContextFragment {
 
             localVideos = new ContentInfoDisplayer(getContext(), Icons.getDefaultInfoThumbnail(), uri, "videos", "Videos");
 
-            autoplayVideos = AppCache.getBoolean(AUTO_PLAY_VIDEOS);
 
-            localVideos.enableMenu(R.drawable.ic_menu_light)
-                    .addMenu(getText(), new MediaDisplayer.OnMenuClickListener() {
+            localMusic.enableMenu(R.drawable.ic_menu_light)
+                    .addMenu(getAutoplayMusicText(), new MediaDisplayer.OnMenuClickListener() {
                         @Override
                         public void onClick(MenuItem menuItem) {
-                                 if (autoplayVideos){
-                                     autoplayVideos = false;
-                                 }
-                                 else {
-                                     autoplayVideos = true;
-                                     mediaPlaybackFragment.startVideosAutoplay();
-                                 }
-                                 menuItem.setTitle(getText());
-                                 AppCache.putBoolean(AUTO_PLAY_VIDEOS, autoplayVideos);
+                            autoMusicItem = menuItem;
+                            if (AppUtil.isAutoplayMusic()){
+                                AppUtil.setMusicAutoplay(false);
+                            }
+                            else {
+                                AppUtil.setMusicAutoplay(true);
+                                mediaPlaybackFragment.startMusicAutoplay();
+                            }
+                            updateMenuItems();
+
+                        }
+                    });
+
+            localVideos.enableMenu(R.drawable.ic_menu_light)
+                    .addMenu(getAutoplayVideosText(), new MediaDisplayer.OnMenuClickListener() {
+                        @Override
+                        public void onClick(MenuItem menuItem) {
+                            autoVideoItem = menuItem;
+                            if (AppUtil.isAutoplayVideos()){
+                                AppUtil.setVideosAutoplay(false);
+                            }
+                            else {
+                                AppUtil.setVideosAutoplay(true);
+                                mediaPlaybackFragment.startVideosAutoplay();
+                            }
+                            updateMenuItems();
+
                         }
                     });
 
@@ -126,15 +172,20 @@ public class MediaCenterFragment extends ContextFragment {
                                public void run() {
                                    AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
                                    builder.setTitle("Select list");
-                                   String[] names = Playlist.displayableNames();
+
+
                                    builder.setItems(names, new DialogInterface.OnClickListener() {
                                        @Override
                                        public void onClick(DialogInterface dialogInterface, int i) {
                                            if (data.getDeviceStat() == null){
                                                System.out.println("WTF???");
                                            }
-                                           addRemoteTab(data, names[i]);
-
+                                           if ("CONTROL".equals(names[i])){
+                                                addRemoteControlTab(data);
+                                           }
+                                           else {
+                                               addRemoteTab(data, names[i]);
+                                           }
                                        }
                                    });
                                    builder.create().show();
@@ -145,13 +196,50 @@ public class MediaCenterFragment extends ContextFragment {
                    });
                 }
             });
-
-
-
         }
 
         return root;
     }
+
+
+    TouchPadView touchPadView;
+
+    public void addRemoteControlTab(RemoteConnection connection){
+
+        if (this.touchPadView != null){
+            this.touchPadView.setConnection(connection);
+            lockTabLayout();
+            touchPadView.unLockedIcon();
+            return;
+        }
+        touchPadView = new TouchPadView(getContext());
+        touchPadView.setConnection(connection);
+        lockTabLayout();
+        touchPadView.unLockedIcon();
+        touchPadView.onButtonClick(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (mainActivity.isViewPagerLocked()) {
+                    mainActivity.unlockViewPager();
+                    ((ImageButton)view).setImageResource(R.drawable.ic_lock);
+                }
+                else {
+                    mainActivity.lockViewPager();
+                    ((ImageButton)view).setImageResource(R.drawable.ic_unlock);
+                }
+            }
+        });
+        root.addMenu(R.drawable.ic_touchpad, R.drawable.ic_touchpad_disabled, "Remote Ctrl", touchPadView);
+
+    }
+
+    void lockTabLayout(){
+        if (mainActivity != null){
+            mainActivity.lockViewPager();
+        }
+    }
+
+
 
 
     public void addRemoteTab(RemoteConnection data, String playlistName){
@@ -209,6 +297,11 @@ public class MediaCenterFragment extends ContextFragment {
 
     public MediaCenterFragment setNeworkRefreshView(SettingsView settingsView) {
         this.settingsView = settingsView;
+        return this;
+    }
+
+    public MediaCenterFragment setMainActivity(MainActivity mainActivity) {
+        this.mainActivity = mainActivity;
         return this;
     }
 }

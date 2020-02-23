@@ -3,8 +3,6 @@ package com.arise.rapdroid.media.server;
 import android.graphics.Color;
 
 public class Icons {
-//    public static int tab4Light = Color.parseColor("#F5ECE4");
-//    public static int tab4Background = Color.parseColor("#FF7A00");
     public static int tab4Background = Color.parseColor("#f4f0ff");
     private static int refreshNetwork = R.drawable.ic_refresh_black_24dp;
 

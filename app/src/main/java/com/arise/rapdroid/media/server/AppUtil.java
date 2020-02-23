@@ -23,11 +23,11 @@ import java.net.URISyntaxException;
 
 public class AppUtil {
 
-    public static final String AUTO_PLAY_VIDEOS = "autovid233";
+//    public static final String AUTO_PLAY_VIDEOS = "autovid233";
     public static final String TAB_POSITION = "tab-position";
     public static final String PLAYBACK_STATE = "playback-state";
 
-
+    public static final String CURRENT_WEBPAGE = "cwweb";
 
     public static final AndroidContentDecoder DECODER = new AndroidContentDecoder();
     public static final ContentInfoProvider contentInfoProvider
@@ -38,11 +38,11 @@ public class AppUtil {
 
 
 
-   public static void showConnectOptions(Context context, SettingsView settingsView, CompleteHandler<RemoteConnection> completeHandler) {
+    public static void showConnectOptions(Context context, SettingsView settingsView, CompleteHandler<RemoteConnection> completeHandler) {
 
        String lastUri = AppCache.getString("currentHttpUrl", "http://");
        AlertDialog.Builder builder = new AlertDialog.Builder(context);
-       builder.setTitle("Select source");
+       builder.setTitle("Select connection");
 
        final EditText input = new EditText(context);
        input.setText(lastUri);
@@ -68,7 +68,6 @@ public class AppUtil {
                                AppCache.putString("currentHttpUrl", uri.toString());
                            }
 
-//                           settingsView.addConnectionIf
                        }
                    }, new CompleteHandler<Throwable>() {
                        @Override
@@ -171,6 +170,32 @@ public class AppUtil {
         }
         return false;
     }
+
+    public static boolean isAutoplayVideos() {
+        return "videos".equals(AppCache.getString("autoplay", ""));
+    }
+
+    public static boolean isAutoplayMusic() {
+        return "music".equals(AppCache.getString("autoplay", ""));
+    }
+
+    public static void setVideosAutoplay(boolean h){
+       if (h){
+           AppCache.putString("autoplay", "videos");
+       }else {
+           AppCache.putString("autoplay", "---");
+       }
+    }
+
+    public static void setMusicAutoplay(boolean h){
+        if (h){
+            AppCache.putString("autoplay", "music");
+        }else {
+            AppCache.putString("autoplay", "---");
+        }
+    }
+
+
 
 
 //    public static void setAutoplay(String playlistId) {

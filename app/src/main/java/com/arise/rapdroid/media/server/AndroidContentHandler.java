@@ -6,6 +6,7 @@ import android.content.Intent;
 import com.arise.astox.net.models.http.HttpResponse;
 import com.arise.core.tools.ContentType;
 import com.arise.weland.dto.ContentInfo;
+import com.arise.weland.dto.Message;
 import com.arise.weland.impl.ContentInfoProvider;
 import com.arise.weland.model.ContentHandler;
 
@@ -47,6 +48,16 @@ public class AndroidContentHandler extends ContentHandler {
     @Override
     public HttpResponse pause(String string) {
         return null;
+    }
+
+    @Override
+    public void onMessageReceived(Message message) {
+        Intent brodcastMsg = new Intent();
+        brodcastMsg.setAction("onMessage");
+        brodcastMsg.putExtra("message", message.toJson());
+        service.sendBroadcast(brodcastMsg);
+
+        //TODO save wall messages
     }
 
     private boolean isLocalMusic(String path){

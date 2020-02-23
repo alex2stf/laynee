@@ -5,7 +5,9 @@ import android.media.MediaPlayer.OnCompletionListener;
 import android.media.MediaPlayer.OnPreparedListener;
 
 import com.arise.weland.dto.ContentInfo;
+import com.arise.weland.dto.Playlist;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
@@ -80,10 +82,16 @@ public enum BackgroundPlayer {
         mediaPlayer.setOnCompletionListener(new OnCompletionListener() {
             @Override
             public void onCompletion(MediaPlayer mediaPlayer) {
+                if (AppUtil.isAutoplayMusic()) {
+                    ContentInfo contentInfo = AppUtil.contentInfoProvider.next(Playlist.MUSIC);
+                    play(contentInfo);
+                }
+
                 if (completeMap.containsKey(path)){
                     completeMap.get(path).onCompletion(mediaPlayer);
                 }
                 completePending.add(path);
+
             }
         });
         mediaPlayer.setOnPreparedListener(new OnPreparedListener() {
@@ -149,10 +157,29 @@ public enum BackgroundPlayer {
     }
 
     public boolean isPlaying(ContentInfo info){
-        return mediaPlayer != null && mediaPlayer.isPlaying() && currentId.equals(info.getPath());
+        return mediaPlayer != null && currentId != null &&
+                mediaPlayer.isPlaying() && currentId.equals(info.getPath());
     }
 
     public int getCurrentPosition() {
         return mediaPlayer != null ? mediaPlayer.getCurrentPosition() : 0;
+    }
+
+    public String getCurrentPath() {
+        return currentId;
+    }
+
+    public ContentInfo getCurrentInfo() {
+        ContentInfo info = null;
+        if (currentId != null){
+            info = AppUtil.contentInfoProvider.findByPath(currentId);
+            if (info == null){
+                File f = new File(currentId);
+                if (f.exists()) {
+                    info = AppUtil.DECODER.decodeFile(f);
+                }
+            }
+        }
+        return info;
     }
 }

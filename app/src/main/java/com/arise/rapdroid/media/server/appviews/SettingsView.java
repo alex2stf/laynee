@@ -2,6 +2,7 @@ package com.arise.rapdroid.media.server.appviews;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.content.Intent;
 import android.graphics.Color;
 import android.view.View;
 import android.widget.Button;
@@ -18,6 +19,7 @@ import com.arise.core.tools.NetworkUtil;
 import com.arise.core.tools.models.CompleteHandler;
 import com.arise.rapdroid.media.server.AppUtil;
 import com.arise.rapdroid.media.server.MainActivity;
+import com.arise.rapdroid.media.server.ServerService;
 import com.arise.rapdroid.media.server.WelandClient;
 import com.arise.weland.dto.DeviceStat;
 import com.arise.weland.dto.Playlist;
@@ -48,7 +50,7 @@ public class SettingsView extends ScrollView {
     private static final Mole log = Mole.getInstance(SettingsView.class);
 
     //TODO deny from setting as remote name
-    private String localhostName = "localhost";
+    private RemoteConnection localConnection;
 
 //    Set<RemoteConnection> connections = new HashSet<>();
     private String currentHttpUrl =  AppCache.getString("currentHttpUrl", "http://localhost:8221/");
@@ -75,16 +77,19 @@ public class SettingsView extends ScrollView {
 
     public SettingsView(MainActivity activity) {
         super(activity);
+
+        try {
+            URI uri = new URI("http://localhost:8221/");
+            localConnection = new RemoteConnection(uri, DeviceStat.getInstance());
+            httpConnections.put(uri, localConnection);
+        } catch (URISyntaxException e) {
+            e.printStackTrace();
+        }
+
         this.activity = activity;
         readCache();
 
 
-//        activity.withBluetoothDiscoverable(new RAPDroidActivity.BluetoothDiscovered() {
-//            @Override
-//            public void onAdapterDiscovered(BluetoothAdapter adapter) {
-//
-//            }
-//        });
 
 
         SmartLayout smartLayout = new SmartLayout(activity);
@@ -93,6 +98,7 @@ public class SettingsView extends ScrollView {
 
 
         blueComps = smartLayout.addLinearLayout();
+
 
 
 
@@ -111,51 +117,14 @@ public class SettingsView extends ScrollView {
             }
         });
 
-//        smartLayout.addEditTextActionDone(currentHttpUrl, new SmartLayout.EditTextActionDoneListener() {
-//            @Override
-//            public void done(EditText editText, SmartLayout layout) {
-//                URI uri;
-//                try {
-//                    uri = new URI(editText.getText().toString());
-//                } catch (Exception e) {
-//                    activity.toastLong("Invalid uri " + editText.getText());
-//                    return;
-//                }
-//
-//                if (uri != null){
-//                    WelandClient.pingHttp(uri, new CompleteHandler<DeviceStat>() {
-//                        @Override
-//                        public void onComplete(DeviceStat data) {
-//                            currentHttpUrl = uri.toString();
-//                            AppCache.putString("currentHttpUrl", currentHttpUrl);
-//                            RemoteConnection remoteConnection = new RemoteConnection(uri, data);
-//                            Button button = new Button(getContext());
-//                            button.setOnClickListener(new OnClickListener() {
-//                                @Override
-//                                public void onClick(View view) {
-//                                    activity.addConversation(remoteConnection);
-//                                }
-//                            });
-//                            activity.runOnUiThread(new Runnable() {
-//                                @Override
-//                                public void run() {
-//                                    button.setText(uri.toString());
-//                                    netComps.addView(button);
-//                                }
-//                            });
-//                        }
-//                    }, new CompleteHandler<Throwable>() {
-//                        @Override
-//                        public void onComplete(Throwable data) {
-//                            activity.toastLong("Invalid response from " + uri.toString());
-//                        }
-//                    });
-//                }
-//
-//
-//            }
-//        });
 
+        smartLayout.addButton("Force shutdown", new SmartLayout.ButtonClickListener() {
+            @Override
+            public void onClick(Button view, SmartLayout self) {
+                activity.stopService(new Intent(activity, ServerService.class));
+                activity.finish();
+            }
+        });
 
         netComps = smartLayout.addLinearLayout();
         TextView textView = new TextView(activity);
@@ -174,6 +143,18 @@ public class SettingsView extends ScrollView {
         });
         refreshUI();
 
+
+        NetworkUtil.scanIPV4(new NetworkUtil.IPIterator() {
+            @Override
+            public void onFound(String ip) {
+                activity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        smartLayout.addTextView(ip, View.TEXT_ALIGNMENT_CENTER);
+                    }
+                });
+            }
+        });
         addView(smartLayout);
     }
 
@@ -189,8 +170,14 @@ public class SettingsView extends ScrollView {
         activity.getBluetoothBondedDevices(new RAPDroidActivity.BluetoothBondedHandler() {
             @Override
             public void onFound(BluetoothAdapter adapter, Set<BluetoothDevice> bondedDevices) {
-                synchronized (bondedDevices){
-                    for (BluetoothDevice device: bondedDevices){
+//                if (!adapter.isEnabled()){
+//                    adapter.enable();
+//                }
+//                if (!adapter.isDiscovering()){
+//                    adapter.startDiscovery();
+//                }
+                synchronized (adapter){
+                    for (BluetoothDevice device: adapter.getBondedDevices()){
                         isScanning = true;
                         if (device != null){
                             WelandClient.pingBluetooth(device, new CompleteHandler<DeviceStat>() {
@@ -205,13 +192,14 @@ public class SettingsView extends ScrollView {
                             }, new CompleteHandler<Throwable>() {
                                 @Override
                                 public void onComplete(Throwable data) {
-                                    log.info("Failed to connect to bluetooth [" + device.getName() + "]");
+                                    log.info("Bluetooth [" + ("" + device.getName()).toUpperCase() + "] failed to connect");
                                     isScanning = false;
                                 }
                             });
                         }
                     }
                     adapter.cancelDiscovery();
+//                    adapter.disable();
                 }
 
             }
@@ -226,15 +214,11 @@ public class SettingsView extends ScrollView {
     }
 
     public RemoteConnection getConnection(String name){
-        if (localhostName.equals(name)){
-            try {
-                return new RemoteConnection(new URI("http://localhost:8221/"), WelandServerHandler.deviceStat);
-            } catch (URISyntaxException e) {
-                e.printStackTrace();
-            }
-        }
+
         for (RemoteConnection conn: httpConnections.values()){
-            if (name.equals(conn.getDeviceStat().getDeviceName())){
+            if (name.equals(conn.getDeviceStat().getDeviceName())
+                || name.equals(conn.getDeviceStat().getDisplayName())
+            ){
                 return conn;
             }
         }
@@ -246,10 +230,7 @@ public class SettingsView extends ScrollView {
 
 
     public SettingsView scanNet() {
-        if (1 == 1){
-            return
-                    this;
-        }
+
         scanIPV4(new NetworkUtil.IPIterator() {
             @Override
             public void onComplete(String[] ips) {
@@ -329,9 +310,8 @@ public class SettingsView extends ScrollView {
 
     public String[] getConnectionNames() {
         Set<RemoteConnection> connections = getConnections();
-        String [] names = new String[connections.size() + 1];
-        names[0] = localhostName;
-        int i = 1;
+        String [] names = new String[connections.size()];
+        int i = 0;
         for (RemoteConnection conn: connections){
             names[i] = conn.getName();
             i++;
@@ -352,5 +332,9 @@ public class SettingsView extends ScrollView {
         RemoteConnection remoteConnection = new RemoteConnection(uri, data);
         httpConnections.put(uri, remoteConnection);
         return remoteConnection;
+    }
+
+    public boolean hasBluetoothConnections() {
+        return !bluetoothConnections.isEmpty();
     }
 }

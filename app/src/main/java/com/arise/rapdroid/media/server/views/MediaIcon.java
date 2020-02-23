@@ -54,7 +54,7 @@ public class MediaIcon extends FrameLayout {
 
 
 
-        imageView.setBackgroundColor(Color.BLACK);
+        imageView.setBackgroundColor(Color.parseColor("#17114a"));
         imageView.setImageResource(defaultRes);
         textView = new TextView(getContext());
         textView.setText(minimize(title));

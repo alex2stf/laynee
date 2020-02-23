@@ -1,6 +1,5 @@
 package com.arise.rapdroid.media.server;
 
-import android.app.Activity;
 import android.bluetooth.BluetoothDevice;
 
 import com.arise.astox.net.clients.JHttpClient;
@@ -8,7 +7,6 @@ import com.arise.astox.net.models.AbstractClient;
 import com.arise.core.tools.SYSUtils;
 import com.arise.core.tools.models.CompleteHandler;
 import com.arise.weland.Client;
-import com.arise.weland.dto.AutoplayMode;
 import com.arise.weland.dto.ContentPage;
 import com.arise.weland.dto.DeviceStat;
 import com.arise.weland.dto.ContentInfo;
@@ -47,7 +45,10 @@ public class WelandClient {
         }
     };
 
-    static synchronized AbstractClient getWorker(Object worker){
+    public static synchronized AbstractClient getWorker(Object worker){
+        if (worker instanceof RemoteConnection){
+            return getWorker(((RemoteConnection) worker).getPayload());
+        }
         String id = getWorkerId(worker);
         if (workersCache.containsKey(id) && workersCache.get(id) != null){
             return workersCache.get(id);
@@ -61,6 +62,9 @@ public class WelandClient {
         else if (worker instanceof URI){
             abstractClient = new JHttpClient().setUri((URI) worker).setErrorHandler(ERROR_HANDLER);
             workersCache.put(id, abstractClient);
+        }
+        else {
+            throw new RuntimeException("Cannot track worker " + worker);
         }
         return abstractClient;
     }
@@ -111,11 +115,23 @@ public class WelandClient {
 
 
 
-    public static void sendTextMessage(RemoteConnection remoteConnection, String text, Message.Type type, CompleteHandler<MessageResponse> onSucces, CompleteHandler onError) {
+    public static void sendMessage(RemoteConnection remoteConnection,  Message message, CompleteHandler<MessageResponse> onSucces, CompleteHandler onError) {
+        MessageResponse messageResponse = new MessageResponse();
+        messageResponse.message = message;
+
+        getClient(remoteConnection.getPayload()).sendMessage(message, new CompleteHandler<DeviceStat>() {
+            @Override
+            public void onComplete(DeviceStat data) {
+                messageResponse.deviceStat = data;
+                onSucces.onComplete(messageResponse);
+            }
+        }, onError);
+    }
+    public static void sendTextMessage(RemoteConnection remoteConnection, String text, CompleteHandler<MessageResponse> onSucces, CompleteHandler onError) {
         Object worker = remoteConnection.getPayload();
         Client client = getClient(worker);
         String receiverId = client.clientId();
-        String senderId = SYSUtils.getDeviceName();
+        String senderId = SYSUtils.getDeviceId();
         String messageId;
 
         String conversationId = remoteConnection.getDeviceStat().getConversationId();
@@ -127,25 +143,17 @@ public class WelandClient {
                 .setConversationId(conversationId)
                 .setSenderId(senderId)
                 .setReceiverId(receiverId)
-                .setType(type)
                 .setText(text);
-        MessageResponse messageResponse = new MessageResponse();
-        messageResponse.message = message;
-        getClient(worker).sendMessage(message, new CompleteHandler<DeviceStat>() {
-            @Override
-            public void onComplete(DeviceStat data) {
-                messageResponse.deviceStat = data;
-                onSucces.onComplete(messageResponse);
-            }
-        }, onError);
+        sendMessage(remoteConnection, message, onSucces, onError);
     }
 
     public static void openFile(ContentInfo info, Object worker) {
         getClient(worker).openFile(info.getPath());
     }
 
-
-
+    public static void openFile(String path, Object worker) {
+        getClient(worker).openFile(path);
+    }
 
     public static void findThumbnail( Object worker, String thumbnailId, CompleteHandler<byte[]> completeHandler) {
         getClient(worker).findThumbnail(thumbnailId, completeHandler, new CompleteHandler() {
@@ -156,18 +164,9 @@ public class WelandClient {
         });
     }
 
-    public static void shuffle(Object worker, String playlistId, CompleteHandler onComplete) {
-        getClient(worker).shuffle(playlistId, onComplete);
-    }
-
-    public static void autoplay(Object worker, String playlistId, AutoplayMode autoplayMode, CompleteHandler onComplete) {
-        getClient(worker).autoplay(Playlist.find(playlistId), autoplayMode, onComplete);
-    }
-
     public static void stop(ContentInfo info, Object worker) {
         getClient(worker).close(info.getPath());
     }
-
 
     public static class MessageResponse {
        public Message message;

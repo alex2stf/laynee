@@ -4,7 +4,6 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.graphics.Bitmap;
-import android.view.MenuItem;
 import android.widget.AbsListView;
 import android.widget.TextView;
 
@@ -13,9 +12,7 @@ import com.arise.core.tools.Mole;
 import com.arise.core.tools.models.CompleteHandler;
 import com.arise.rapdroid.media.server.AppUtil;
 import com.arise.rapdroid.media.server.Icons;
-import com.arise.rapdroid.media.server.R;
 import com.arise.rapdroid.media.server.WelandClient;
-import com.arise.weland.dto.AutoplayMode;
 import com.arise.weland.dto.ContentInfo;
 import com.arise.weland.dto.ContentPage;
 import com.arise.rapdroid.media.server.views.MediaDisplayer;
@@ -46,7 +43,6 @@ public class ContentInfoDisplayer extends MediaDisplayer {
             @Override
             public void onScrollStateChanged(AbsListView absListView, int i) {
                 if (!isFetching && currentIndex != null){
-                    log.info("SCROLL FETCH " + playlistId);
                     fetchData();
                 }
             }
@@ -136,9 +132,9 @@ public class ContentInfoDisplayer extends MediaDisplayer {
                 List<ContentInfo> batch = data.getData();
                 currentIndex = data.getIndex();
                 dataLoadedLength += batch.size();
-                log.info("CURRENT_INDEX = " + currentIndex + " from "
-                        + WelandClient.getWorkerId(worker) + "/" + playlistId + " data loaded: " + dataLoadedLength +
-                        " autoplay mode " + data.getAutoplayMode());
+//                log.info("CURRENT_INDEX = " + currentIndex + " from "
+//                        + WelandClient.getWorkerId(worker) + "/" + playlistId + " data loaded: " + dataLoadedLength +
+//                        " autoplay mode " + data.getAutoplayMode());
                 if (!CollectionUtil.isEmpty(batch)){
 
                     addBatch(batch, new CompleteHandler<Object>() {

@@ -11,6 +11,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.AdapterView;
 import android.widget.GridView;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
@@ -19,8 +20,11 @@ import android.widget.SearchView;
 import android.widget.TextView;
 
 import com.arise.core.tools.CollectionUtil;
+import com.arise.core.tools.Mole;
+import com.arise.core.tools.StringUtil;
 import com.arise.core.tools.models.CompleteHandler;
 import com.arise.rapdroid.RAPDUtils;
+import com.arise.rapdroid.media.server.AppUtil;
 import com.arise.rapdroid.media.server.Icons;
 import com.arise.rapdroid.media.server.R;
 import com.arise.weland.dto.ContentInfo;
@@ -29,28 +33,38 @@ import com.arise.rapdroid.components.ui.adapters.ListViewAdapter;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * https://live.rockfm.ro:8443/rockfm.aacp
  */
-public class MediaDisplayer extends LinearLayout implements View.OnClickListener {
+public class MediaDisplayer extends LinearLayout {
 
     private final Context context;
     private final int defaultRes;
     ListViewAdapter adapterContainer;
-    protected List<ContentInfo> mediaInfos = new ArrayList<>();
+    protected Set<MediaIcon> mediaIcons = new HashSet<>();
     protected GridView gridView;
     PopupMenu popupMenu;
     TextView title;
     LinearLayout top;
     LinearLayout topLeft;
 
+
+
     public MediaDisplayer(Context context, int defaultRes) {
         super(context);
         this.context = context;
         this.defaultRes = defaultRes;
+        createTopBar();
+        createGridView();
+    }
+
+    private void createTopBar(){
+
         adapterContainer = new ListViewAdapter();
         setOrientation(VERTICAL);
 
@@ -63,18 +77,28 @@ public class MediaDisplayer extends LinearLayout implements View.OnClickListener
         topLeft.setGravity(Gravity.CENTER|Gravity.RIGHT);
 
         SearchView searchView = new SearchView(context);
+        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override
+            public boolean onQueryTextSubmit(String s) {
+                search(s);
+                return false;
+            }
+
+            @Override
+            public boolean onQueryTextChange(String s) {
+
+                backgroundPrepareSearch(s);
+                return false;
+            }
+        });
 
         top.addView(searchView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, 0.5f));
         top.addView(topLeft, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, 0.5f));
-
-
-
-
         addView(top, Layouts.matchParentWrapContent());
 
+    }
 
-
-
+    private void createGridView(){
         gridView = new GridView(context);
         gridView.setAdapter(adapterContainer);
         gridView.setNumColumns(GridView.AUTO_FIT);
@@ -83,12 +107,66 @@ public class MediaDisplayer extends LinearLayout implements View.OnClickListener
         gridView.setColumnWidth(420);
         gridView.setVerticalSpacing(20);
         gridView.setHorizontalSpacing(20);
+        gridView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
+               showOptions(view);
+            }
+        });
         addView(gridView, Layouts.matchParentWrapContent());
+    }
 
-
+    private void showOptions(View view) {
+        if (!(view instanceof MediaIcon)){
+            log.info("view is not media icon: " + (view != null ? view.getClass() : "null"));
+            return;
+        }
+        MediaIcon icon = (MediaIcon) view;
+        AlertDialog dialog = buildDialog(icon);
+        dialog.show();
+        onMediaIconClick(icon);
     }
 
 
+    //    String searchQuery;
+    Map<String, List<String>> params = new HashMap<>();
+    private void backgroundPrepareSearch(String query){
+        StringUtil.decodeQuery(query, params);
+
+        if (params.containsKey("group")){
+
+        }
+    }
+
+    private volatile boolean searchInProgress = false;
+
+    private void search(String s){
+
+        if ("ALL".equals(s)){
+
+        }
+
+        searchInProgress = true;
+        synchronized (mediaIcons){
+            List<View> results = new ArrayList<>();
+            for (MediaIcon icon: mediaIcons){
+                if (icon.getMediaInfo().getPath().toLowerCase().indexOf(s) > -1){
+                    results.add(icon);
+                }
+                else if ("ALL".equalsIgnoreCase(s)){
+                    results.add(icon);
+                }
+            }
+            adapterContainer.setViews(results);
+            adapterContainer.notifyDataSetChanged();
+            searchInProgress = false;
+
+        }
+
+        System.out.println(params);
+        System.out.println(s);
+        params.clear();
+    }
 
 
 
@@ -104,10 +182,7 @@ public class MediaDisplayer extends LinearLayout implements View.OnClickListener
 
 
 
-    public MediaDisplayer setMediaInfos(List<ContentInfo> infos){
-        this.mediaInfos = infos;
-        return this;
-    }
+
 
     public MediaDisplayer setTitle(String text, int textColor) {
         title = new TextView(getContext());
@@ -171,10 +246,16 @@ public class MediaDisplayer extends LinearLayout implements View.OnClickListener
         }
     }
 
+    private static final Mole log = Mole.getInstance(MediaDisplayer.class);
 
     MediaIcon buildIcon(ContentInfo mediaInfo){
         MediaIcon mediaIcon = new MediaIcon(context, mediaInfo, defaultRes, 420);
-        mediaIcon.setOnClickListener(this::onClick);
+//        mediaIcon.setOnClickListener(new OnClickListener() {
+//            @Override
+//            public void onClick(View view) {
+//                showOptions(view);
+//            }
+//        });
         postIconBuild(mediaIcon);
         return mediaIcon;
     }
@@ -203,6 +284,7 @@ public class MediaDisplayer extends LinearLayout implements View.OnClickListener
     }
 
 
+
     public MediaDisplayer addBatch(List<ContentInfo> infos, CompleteHandler<Object> completeHandler){
         runOnUiThread(new Runnable() {
             @Override
@@ -210,9 +292,20 @@ public class MediaDisplayer extends LinearLayout implements View.OnClickListener
                 if (!CollectionUtil.isEmpty(infos)){
                     for (ContentInfo info: infos){
                         MediaIcon mediaIcon = buildIcon(info);
-                        adapterContainer.add(mediaIcon);
+
+                        synchronized (mediaIcons){
+                            if (!mediaIcons.contains(mediaIcon)){
+                                mediaIcons.add(mediaIcon);
+                            }
+                        }
+
+                        if (!searchInProgress){
+                            adapterContainer.add(mediaIcon);
+                        }
                     }
-                    adapterContainer.notifyDataSetChanged();
+                    if (!searchInProgress){
+                        adapterContainer.notifyDataSetChanged();
+                    }
                 }
 
                 completeHandler.onComplete(this);
@@ -233,16 +326,7 @@ public class MediaDisplayer extends LinearLayout implements View.OnClickListener
         options.add(option);
     }
 
-    @Override
-    public void onClick(View view) {
-        if (!(view instanceof MediaIcon)){
-            return;
-        }
-        MediaIcon icon = (MediaIcon) view;
-        AlertDialog dialog = buildDialog(icon);
-        dialog.show();
-        onMediaIconClick(icon);
-    }
+
 
     protected void onMediaIconClick(MediaIcon icon) {
 

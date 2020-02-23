@@ -46,7 +46,7 @@ public class LogFragment extends ContextFragment implements Mole.Appender {
             }
             root.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
             root.setPadding(10, 10, 10, 10);
-            scrollView.addView(root, Layouts.matchParentMatchParent());
+            scrollView.addView(root, Layouts.Linear.matchParentMatchParent());
         }
         return scrollView;
     }

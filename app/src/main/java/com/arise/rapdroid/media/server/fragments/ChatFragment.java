@@ -4,10 +4,12 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageButton;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.arise.core.tools.SYSUtils;
 import com.arise.core.tools.models.CompleteHandler;
 import com.arise.rapdroid.media.server.AppUtil;
 import com.arise.rapdroid.media.server.Icons;
@@ -16,6 +18,8 @@ import com.arise.rapdroid.media.server.R;
 import com.arise.rapdroid.media.server.WelandClient;
 import com.arise.rapdroid.media.server.appviews.SettingsView;
 import com.arise.rapdroid.media.server.appviews.WallView;
+import com.arise.weland.dto.DTOUtil;
+import com.arise.weland.dto.DeviceStat;
 import com.arise.weland.dto.Message;
 import com.arise.weland.dto.RemoteConnection;
 import com.arise.weland.utils.WelandServerHandler;
@@ -65,11 +69,37 @@ public class ChatFragment extends ContextFragment implements ConversationView.Se
                     });
                 }
             });
-            root.addMenu(R.drawable.ic_all_out, R.drawable.ic_all_out, "Wall", new WallView(getContext()));
+            ConversationView wallView = new WallView(getContext(), settingsView)
+                    .setConversationId(DTOUtil.WALL_RESERVED_ID)
+                    //owner is always the receiver
+                    .setOwnerId(DTOUtil.sanitize(SYSUtils.getDeviceId()));
+
+            ImageButton img = new ImageButton(getContext());
+            img.setImageResource(R.drawable.ic_image_chat);
+            img.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    mainActivity.chooseFile(new RAPDroidActivity.FileChooseHandler() {
+                        @Override
+                        public void onFileSelected(File file) {
+                            wallView.prepare(file);
+                        }
+                    });
+                }
+            });
+            wallView.addExtra(img);
+
+            conversationViewMap.put(DTOUtil.WALL_RESERVED_ID, wallView);
+
+
+            root.addMenu(R.drawable.ic_all_out, R.drawable.ic_all_out, "Wall", wallView);
 
         }
         return root;
     }
+
+
+
 
     public void addConversation(RemoteConnection remoteConnection) {
 //        if (root != null) {
@@ -101,7 +131,6 @@ public class ChatFragment extends ContextFragment implements ConversationView.Se
         WelandClient.sendTextMessage(
                 conversationView.getRemoteConnection(),
                 text,
-                Message.Type.TEXT,
                 new CompleteHandler<WelandClient.MessageResponse>() {
                     @Override
                     public void onComplete(WelandClient.MessageResponse data) {
@@ -109,7 +138,7 @@ public class ChatFragment extends ContextFragment implements ConversationView.Se
                             runOnUiThread(new Runnable() {
                                 @Override
                                 public void run() {
-                                    conversationView.addSenderMsg(data.message);
+                                    conversationView.addMessage(data.message);
                                 }
                             });
                         }
@@ -151,7 +180,6 @@ public class ChatFragment extends ContextFragment implements ConversationView.Se
     }
 
     public void onMessageReceiver(Message msg) {
-        System.out.println("RECEIVED MESSAGE " + msg.toJson());
-        conversationViewMap.get(msg.getConversationId()).addSenderMsg(msg);
+        conversationViewMap.get(msg.getConversationId()).addMessage(msg);
     }
 }

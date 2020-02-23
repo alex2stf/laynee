@@ -13,6 +13,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.LinearLayout;
 
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.content.ContextCompat;
 import androidx.viewpager.widget.ViewPager;
 
@@ -49,10 +50,13 @@ import static android.Manifest.permission.READ_EXTERNAL_STORAGE;
 import static android.Manifest.permission.RECORD_AUDIO;
 import static android.Manifest.permission.VIBRATE;
 import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
-import static com.arise.rapdroid.media.server.AppUtil.AUTO_PLAY_VIDEOS;
 import static com.arise.rapdroid.media.server.AppUtil.TAB_POSITION;
 
 public class MainActivity extends RAPDroidActivity {
+
+    static {
+        AppCompatDelegate.setCompatVectorFromResourcesEnabled(true);
+    }
 
     public SettingsFragment settingsFragment;
     MediaPlaybackFragment mediaPlaybackFragment;
@@ -61,7 +65,7 @@ public class MainActivity extends RAPDroidActivity {
     SettingsView settingsView;
     LogFragment logFragment;
     BrowserFragment browserFragment;
-    ViewPager viewPager;
+    AppViewPager viewPager;
     int tabPosition = 0;
     Object[][] pages;
     int previousPosition = 0;
@@ -90,7 +94,7 @@ public class MainActivity extends RAPDroidActivity {
             String path = intent.getStringExtra("path");
             File file = new File(path);
             if (file.exists()){
-                ContentInfo contentInfo = AppUtil.DECODER.decode(file);
+                ContentInfo contentInfo = AppUtil.DECODER.decodeFile(file);
                 //TODO check content type
                 if (contentInfo != null){
                     mediaPlaybackFragment.play(contentInfo);
@@ -125,10 +129,19 @@ public class MainActivity extends RAPDroidActivity {
 
         startServerService();
 
-        if (AppCache.getBoolean(AUTO_PLAY_VIDEOS)){
+        if (AppUtil.isAutoplayVideos()){
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
 
+            //enter full screen
+            View decorView = getWindow().getDecorView();
+            int uiOptions = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN;
+            decorView.setSystemUiVisibility(uiOptions);
         }
+
+
+
+
         //apply a custom theme based on preferred tab
 //        getTheme().applyStyle();
         this.hideTitle();
@@ -157,13 +170,14 @@ public class MainActivity extends RAPDroidActivity {
                 .setMainActivity(this);
 
         mediaCenterFragment = new MediaCenterFragment()
-                        .setNeworkRefreshView(settingsView);
+                        .setNeworkRefreshView(settingsView)
+                        .setMainActivity(this);
 
 
         //binding
         mediaPlaybackFragment.setMediaCenter(mediaCenterFragment);
 
-        viewPager = new ViewPager(this);
+        viewPager = new AppViewPager(this){};
         viewPager.setId(viewPager.hashCode());
 
 
@@ -242,8 +256,8 @@ public class MainActivity extends RAPDroidActivity {
 
 
         root.addView(tabLayout, com.arise.rapdroid.components.ui.Layouts.matchParentWrapContent());
-        root.addView(viewPager, com.arise.rapdroid.components.ui.Layouts.matchParentMatchParent());
-        setContentView(root, com.arise.rapdroid.components.ui.Layouts.matchParentMatchParent());
+        root.addView(viewPager, com.arise.rapdroid.components.ui.Layouts.Linear.matchParentMatchParent());
+        setContentView(root, com.arise.rapdroid.components.ui.Layouts.Linear.matchParentMatchParent());
 
 
 
@@ -278,7 +292,12 @@ public class MainActivity extends RAPDroidActivity {
             }
             else {
                 if (sources[i].length > 4) {
-                    tab.setIcon((int) sources[i][4]);
+                   try {
+                       tab.setIcon((int) sources[i][4]);
+                   }catch (Throwable t){
+                       System.out.println("RESOURCE NOT FOUND EXCEPTION");
+                       t.printStackTrace();
+                   }
                 }
                 trySetTabColor(tab, restColors[position][i]);
 
@@ -450,5 +469,24 @@ public class MainActivity extends RAPDroidActivity {
         }
 
         autoGoToTab(previousPosition);
+    }
+
+    public void lockViewPager() {
+        if (viewPager != null){
+            viewPager.setTouchEnabled(false);
+        }
+    }
+
+    public boolean isViewPagerLocked() {
+        if (viewPager != null){
+            return !viewPager.isTouchEnabled();
+        }
+        return true;
+    }
+
+    public void unlockViewPager() {
+        if (viewPager != null){
+            viewPager.setTouchEnabled(true);
+        }
     }
 }
