@@ -13,7 +13,9 @@ import android.util.Log;
 import android.view.View;
 import android.widget.LinearLayout;
 
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatDelegate;
+import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.viewpager.widget.ViewPager;
 
@@ -21,17 +23,17 @@ import com.arise.core.serializers.parser.Groot;
 import com.arise.core.tools.AppCache;
 import com.arise.core.tools.ContentType;
 import com.arise.core.tools.Mole;
+import com.arise.core.tools.Util;
 import com.arise.rapdroid.media.server.appviews.SettingsView;
 import com.arise.rapdroid.media.server.fragments.BrowserFragment;
-import com.arise.rapdroid.media.server.fragments.ChatFragment;
 import com.arise.rapdroid.media.server.fragments.LogFragment;
 import com.arise.rapdroid.media.server.fragments.MediaCenterFragment;
 import com.arise.rapdroid.media.server.fragments.MediaPlaybackFragment;
 import com.arise.rapdroid.media.server.fragments.SettingsFragment;
 import com.arise.weland.dto.ContentInfo;
 import com.arise.weland.dto.Message;
-import com.arise.weland.dto.RemoteConnection;
 import com.arise.rapdroid.RAPDroidActivity;
+import com.arise.weland.utils.AppSettings;
 import com.google.android.material.tabs.TabLayout;
 
 import java.io.File;
@@ -60,7 +62,7 @@ public class MainActivity extends RAPDroidActivity {
 
     public SettingsFragment settingsFragment;
     MediaPlaybackFragment mediaPlaybackFragment;
-    ChatFragment chatFragment;
+//    ChatFragment chatFragment;
     MediaCenterFragment mediaCenterFragment;
     SettingsView settingsView;
     LogFragment logFragment;
@@ -71,30 +73,29 @@ public class MainActivity extends RAPDroidActivity {
     int previousPosition = 0;
     private volatile boolean tabInit = false;
 
-    BroadcastReceiver onStartServerReceiver = new BroadcastReceiver() {
+    final BroadcastReceiver onStartServerReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             settingsView.setServerInfo(isServerRunning(), intent.getStringExtra("http-connect"));
-            settingsView.refreshUI();
         }
     };
 
-    BroadcastReceiver onMessageReceiver = new BroadcastReceiver() {
+    final BroadcastReceiver onMessageReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             String message = intent.getStringExtra("message");
             Message msg = Message.fromMap((Map<String, Object>) Groot.decodeBytes(message));
-            chatFragment.onMessageReceiver(msg);
+//            chatFragment.onMessageReceiver(msg);
         }
     };
 
-    BroadcastReceiver onOpenFileReceiver = new BroadcastReceiver() {
+    final BroadcastReceiver onOpenFileReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             String path = intent.getStringExtra("path");
             File file = new File(path);
             if (file.exists()){
-                ContentInfo contentInfo = AppUtil.DECODER.decodeFile(file);
+                ContentInfo contentInfo = AppUtil.DECODER.decode(file);
                 //TODO check content type
                 if (contentInfo != null){
                     mediaPlaybackFragment.play(contentInfo);
@@ -110,6 +111,14 @@ public class MainActivity extends RAPDroidActivity {
     };
 
 
+    final BroadcastReceiver onStopReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            mediaPlaybackFragment.stop();
+        }
+    };
+
+
 
 
 
@@ -120,16 +129,17 @@ public class MainActivity extends RAPDroidActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Util.registerContext(this);
+        ContentType.AUDIO_MPEG_3.setResId(R.drawable.ic_treble_clef);
+        this.hideTitle();
         SharedPreferences worker = getSharedPreferences("prefs", MODE_PRIVATE);
         AppCache.setWorker(worker);
 
 
         tabPosition = AppCache.getInt(TAB_POSITION, 0);
-        //start server
 
-        startServerService();
 
-        if (AppUtil.isAutoplayVideos()){
+        if (AppSettings.isAutoplayVideos() || AppCache.getBoolean(AppUtil.FORCE_LANDSCAPE)){
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
 
             //enter full screen
@@ -139,14 +149,6 @@ public class MainActivity extends RAPDroidActivity {
             decorView.setSystemUiVisibility(uiOptions);
         }
 
-
-
-
-        //apply a custom theme based on preferred tab
-//        getTheme().applyStyle();
-        this.hideTitle();
-
-        ContentType.VIDEO_MP4.setResId(R.mipmap.icon_mp4);
 
         //logging adapter
         logFragment = new LogFragment();
@@ -165,17 +167,19 @@ public class MainActivity extends RAPDroidActivity {
 
 
         mediaPlaybackFragment = new MediaPlaybackFragment();
-        chatFragment = new ChatFragment()
-                .setSettingsView(settingsView)
-                .setMainActivity(this);
+        settingsView.setMediaPlaybackFragment(mediaPlaybackFragment);
 
-        mediaCenterFragment = new MediaCenterFragment()
-                        .setNeworkRefreshView(settingsView)
-                        .setMainActivity(this);
+//        chatFragment = new ChatFragment()
+//                .setSettingsView(settingsView)
+//                .setMainActivity(this);
+
+        mediaCenterFragment = new MediaCenterFragment();
+//                .setNeworkRefreshView(settingsView)
+//                .setMainActivity(this);
 
 
         //binding
-        mediaPlaybackFragment.setMediaCenter(mediaCenterFragment);
+//        mediaPlaybackFragment.setMediaCenter(mediaCenterFragment);
 
         viewPager = new AppViewPager(this){};
         viewPager.setId(viewPager.hashCode());
@@ -185,7 +189,7 @@ public class MainActivity extends RAPDroidActivity {
         pages = new Object[][]{
                 {mediaCenterFragment, "", Icons.tab1Background, R.drawable.ic_tab_playlists, R.drawable.ic_tab_playlists_disabled},
                 {browserFragment, "", Icons.tab2Background, R.drawable.ic_tab_web, R.drawable.ic_tab_web_disabled },
-                {chatFragment, "", Icons.tab3Background, R.drawable.ic_tab_chat, R.drawable.ic_tab_chat_disabled },
+//                {chatFragment, "", Icons.tab3Background, R.drawable.ic_tab_chat, R.drawable.ic_tab_chat_disabled },
                 {settingsFragment, "", Icons.tab4Background, R.drawable.ic_tab_settings, R.drawable.ic_tab_settings_disabled },
                 {mediaPlaybackFragment, "", Color.BLACK, R.drawable.ic_tab_media, R.drawable.ic_tab_media_disabled },
                 {logFragment, "!", Icons.tab7Background}
@@ -200,12 +204,14 @@ public class MainActivity extends RAPDroidActivity {
         }
         viewPager.setOffscreenPageLimit(appPageAdapter.getCount());
         viewPager.setAdapter(appPageAdapter);
+        viewPager.setTouchEnabled(false);
 
 
 
         this.registerReceiver(onStartServerReceiver, new IntentFilter("onStart"));
         this.registerReceiver(onMessageReceiver, new IntentFilter("onMessage"));
-        this.registerReceiver(onOpenFileReceiver, new IntentFilter("openFile"));
+        this.registerReceiver(onOpenFileReceiver, new IntentFilter("weland.openFile"));
+        this.registerReceiver(onStopReceiver, new IntentFilter("weland.closeFile"));
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -257,15 +263,36 @@ public class MainActivity extends RAPDroidActivity {
 
         root.addView(tabLayout, com.arise.rapdroid.components.ui.Layouts.matchParentWrapContent());
         root.addView(viewPager, com.arise.rapdroid.components.ui.Layouts.Linear.matchParentMatchParent());
+
+
         setContentView(root, com.arise.rapdroid.components.ui.Layouts.Linear.matchParentMatchParent());
 
 
 
+        if (arePermissionsGranted()){
+            this.afterPermissionsGranted(savedInstanceState);
+        } else {
+            ActivityCompat.requestPermissions(this, permissions(), REQUEST_ID_MULTIPLE_PERMISSIONS);
+        }
+
+
+    }
+
+
+
+    @Override
+    protected void afterPermissionsGranted(@Nullable Bundle savedInstanceState) {
+
+        startServerService();
 
         new SamsungDevice(this).discover();
 
         autoGoToTab(tabPosition);
+
+
+
     }
+
 
 
 
@@ -303,7 +330,6 @@ public class MainActivity extends RAPDroidActivity {
 
             }
         }
-
 
     }
 
@@ -365,8 +391,12 @@ public class MainActivity extends RAPDroidActivity {
 
     @Override
     protected void onPause() {
-        mediaPlaybackFragment.saveState();
-        browserFragment.saveState();
+        if (mediaPlaybackFragment != null) {
+            mediaPlaybackFragment.saveState();
+        }
+        if (browserFragment != null) {
+            browserFragment.saveState();
+        }
         AppCache.putInt(TAB_POSITION, tabPosition);
         super.onPause();
     }
@@ -374,8 +404,12 @@ public class MainActivity extends RAPDroidActivity {
     @Override
     protected void onStop() {
         AppCache.putInt(TAB_POSITION, tabPosition);
-        mediaPlaybackFragment.saveState();
-        browserFragment.saveState();
+        if (mediaPlaybackFragment != null) {
+            mediaPlaybackFragment.saveState();
+        }
+        if (browserFragment != null) {
+            browserFragment.saveState();
+        }
         safeUnregisterReceiver(onStartServerReceiver);
         safeUnregisterReceiver(onMessageReceiver);
         safeUnregisterReceiver(onOpenFileReceiver);
@@ -387,9 +421,12 @@ public class MainActivity extends RAPDroidActivity {
         AppCache.putInt(TAB_POSITION, tabPosition);
         mediaPlaybackFragment.saveState();
         browserFragment.saveState();
+        settingsView.activityDestroyed();
         safeUnregisterReceiver(onStartServerReceiver);
         safeUnregisterReceiver(onMessageReceiver);
         safeUnregisterReceiver(onOpenFileReceiver);
+        safeUnregisterReceiver(onStopReceiver);
+
         super.onDestroy();
     }
 
@@ -404,23 +441,23 @@ public class MainActivity extends RAPDroidActivity {
 
 
 
-    public void addConversation(RemoteConnection remoteConnection) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                if (chatFragment != null){
-                    chatFragment.addConversation(remoteConnection);
-                }
-            }
-        });
-    }
+//    public void addConversation(RemoteConnection remoteConnection) {
+////        runOnUiThread(new Runnable() {
+////            @Override
+////            public void run() {
+////                if (chatFragment != null){
+////                    chatFragment.addConversation(remoteConnection);
+////                }
+////            }
+////        });
+//    }
 
 
     public void showVideoFragment() {
-        autoGoToTab(4);
+        autoGoToTab(3);
     }
 
-    boolean isUrl(String s){
+    public static boolean isUrl(String s){
         URL url;
         try {
             url = new URL(s);
@@ -489,4 +526,6 @@ public class MainActivity extends RAPDroidActivity {
             viewPager.setTouchEnabled(true);
         }
     }
+
+
 }

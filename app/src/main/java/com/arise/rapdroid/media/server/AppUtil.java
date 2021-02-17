@@ -1,5 +1,6 @@
 package com.arise.rapdroid.media.server;
 
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Context;
@@ -9,38 +10,62 @@ import android.widget.EditText;
 import android.widget.TextView;
 
 import com.arise.core.tools.AppCache;
+import com.arise.core.tools.FileUtil;
 import com.arise.core.tools.Mole;
+import com.arise.core.tools.StringUtil;
 import com.arise.core.tools.models.CompleteHandler;
+import com.arise.rapdroid.RAPDUtils;
 import com.arise.rapdroid.media.server.appviews.SettingsView;
+import com.arise.weland.WelandClient;
 import com.arise.weland.dto.ContentInfo;
 import com.arise.weland.dto.DeviceStat;
 import com.arise.weland.dto.RemoteConnection;
 import com.arise.weland.impl.ContentInfoProvider;
 import com.arise.rapdroid.AndroidContentDecoder;
 
+import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
 
 public class AppUtil {
 
-//    public static final String AUTO_PLAY_VIDEOS = "autovid233";
+
+
+    public static ContentInfo saveCurrentInfo(ContentInfo contentInfo){
+        contentInfoProvider.getDecoder().saveState(contentInfo);
+        return contentInfo;
+    }
+
+    public static ContentInfo getSavedContentInfo(){
+        return contentInfoProvider.getDecoder().getSavedState();
+    }
+
+
+
+
     public static final String TAB_POSITION = "tab-position";
     public static final String PLAYBACK_STATE = "playback-state";
 
-    public static final String CURRENT_WEBPAGE = "cwweb";
+
+    public static final String FORCE_LANDSCAPE = "lnd2702";
+
 
     public static final AndroidContentDecoder DECODER = new AndroidContentDecoder();
+
+
     public static final ContentInfoProvider contentInfoProvider
             = new ContentInfoProvider(DECODER)
-            .addRoot(Environment.getExternalStorageDirectory())
-            .importJson("weland/config/commons/content-infos.json")
-            .get();
+            .addRoot(FileUtil.findMusicDir())
+            .addRoot(FileUtil.getUploadDir())
+            .addRoot(FileUtil.findMoviesDir())
+//            .get()
+            ;
 
 
 
     public static void showConnectOptions(Context context, SettingsView settingsView, CompleteHandler<RemoteConnection> completeHandler) {
 
-       String lastUri = AppCache.getString("currentHttpUrl", "http://");
+       String lastUri = AppCache.getString("currentHttpUrl", "http://localhost:8221");
        AlertDialog.Builder builder = new AlertDialog.Builder(context);
        builder.setTitle("Select connection");
 
@@ -50,7 +75,9 @@ public class AppUtil {
        builder.setPositiveButton("Manually Connect", new DialogInterface.OnClickListener() {
            @Override
            public void onClick(DialogInterface dialogInterface, int i) {
-                String text = input.getText().toString();
+               RAPDUtils.hideKeyboard(settingsView);
+               String text = input.getText().toString();
+
                try {
                    URI uri = new URI(text);
 
@@ -63,9 +90,9 @@ public class AppUtil {
                            }
 
                            else {
-
                                completeHandler.onComplete(remoteConnection);
                                AppCache.putString("currentHttpUrl", uri.toString());
+                               settingsView.register(remoteConnection);
                            }
 
                        }
@@ -75,7 +102,7 @@ public class AppUtil {
                            showFailure(context, data, settingsView, completeHandler);
                        }
                    });
-               } catch (URISyntaxException e) {
+               } catch (Exception e) {
                   showFailure(context, e, settingsView, completeHandler);
                }
            }
@@ -124,10 +151,17 @@ public class AppUtil {
                                    SettingsView settingsView,
                                    CompleteHandler<RemoteConnection> completeHandler){
         log.error("Error", error);
+        if (error == null || ! (context instanceof Activity)){
+            return;
+        }
+
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
         builder.setTitle("Failed to connect");
         final TextView view = new TextView(context);
+
+
         view.setText("E" + error.getMessage());
+
         builder.setView(view);
         builder.setPositiveButton("Try again", new DialogInterface.OnClickListener() {
             @Override
@@ -138,30 +172,19 @@ public class AppUtil {
         builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialogInterface, int i) {
-                completeHandler.onComplete(null);
+//                completeHandler.onComplete(null);
+                ;;
             }
         });
-        builder.create().show();
-    }
-
-
-
-    public static void showSendUrlOptions(Context context, SettingsView settingsView, String url) {
-        AppUtil.showConnectOptions(context, settingsView, new CompleteHandler<RemoteConnection>() {
+        ((Activity) context).runOnUiThread(new Runnable() {
             @Override
-            public void onComplete(RemoteConnection data) {
-                Object worker = data.getPayload();
-                WelandClient.openInRemoteBrowser(worker, url);
+            public void run() {
+                builder.create().show();
+                RAPDUtils.hideKeyboard(settingsView);
             }
         });
     }
 
-    public static void setCurrentMediaSource(ContentInfo info) {
-        if (info == null){
-            return;
-        }
-        AppCache.putString("media-src", info.toString());
-    }
 
     public static boolean workerIsLocalhost(Object worker){
         if (worker != null && worker instanceof URI){
@@ -171,39 +194,11 @@ public class AppUtil {
         return false;
     }
 
-    public static boolean isAutoplayVideos() {
-        return "videos".equals(AppCache.getString("autoplay", ""));
-    }
-
-    public static boolean isAutoplayMusic() {
-        return "music".equals(AppCache.getString("autoplay", ""));
-    }
-
-    public static void setVideosAutoplay(boolean h){
-       if (h){
-           AppCache.putString("autoplay", "videos");
-       }else {
-           AppCache.putString("autoplay", "---");
-       }
-    }
-
-    public static void setMusicAutoplay(boolean h){
-        if (h){
-            AppCache.putString("autoplay", "music");
-        }else {
-            AppCache.putString("autoplay", "---");
-        }
-    }
 
 
 
 
-//    public static void setAutoplay(String playlistId) {
-//        AppCache.putString("autoplay-list", playlistId);
-//    }
-//
-//    public static boolean isAutoplay(String playlistId) {
-//        String playlist = AppCache.getString("autoplay-list", null);
-//        return (playlistId + "").equalsIgnoreCase(playlist);
-//    }
+
+
+
 }

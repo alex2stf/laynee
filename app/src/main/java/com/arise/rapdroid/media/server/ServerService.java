@@ -3,9 +3,16 @@ package com.arise.rapdroid.media.server;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.SurfaceTexture;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.os.BatteryManager;
 import android.os.IBinder;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -27,6 +34,7 @@ import com.arise.rapdroid.NotificationOps;
 import com.arise.rapdroid.RAPDUtils;
 import com.arise.rapdroid.net.CamStreamResponse;
 import com.arise.rapdroid.net.WavRecorderResponse;
+import com.arise.weland.dto.DeviceStat;
 import com.arise.weland.impl.IDeviceController;
 import com.arise.weland.impl.WelandRequestBuilder;
 import com.arise.weland.utils.JPEGOfferResponse;
@@ -45,17 +53,19 @@ public class ServerService extends Service {
     private static final Mole log = Mole.getInstance(ServerService.class);
     final MJPEGResponse mjpegResponse = new MJPEGResponse();
     final JPEGOfferResponse jpegOfferResponse = new JPEGOfferResponse();
-   final WelandServerHandler serverHandler;
-   final WelandRequestBuilder requestBuilder;
+    final WelandServerHandler serverHandler;
+    final WelandRequestBuilder requestBuilder;
     WavRecorderResponse wavRecorderResponse = new WavRecorderResponse();
     AbstractServer server;
-//    private volatile AbstractServer server;
+    //    private volatile AbstractServer server;
     private volatile CamStreamResponse camStreamResponse;
 
+    private int cameraIndex = 0;
+    private int lightMode = 0;
 
 
 
-    public ServerService(){
+    public ServerService() {
 
         serverHandler = new WelandServerHandler().setContentProvider(AppUtil.contentInfoProvider);
         requestBuilder = new WelandRequestBuilder(new IDeviceController() {
@@ -68,7 +78,7 @@ public class ServerService extends Service {
         try {
             ContentType.loadDefinitions();
             log.info("Successfully loaded content-type definitions");
-        } catch (Exception e){
+        } catch (Exception e) {
             log.error("Failed to load content-type definitions", e);
         }
 
@@ -77,46 +87,64 @@ public class ServerService extends Service {
         serverHandler.setLiveWav(wavRecorderResponse);
 
 
-
         serverHandler.beforeLiveWAV(new WelandServerHandler.Handler<HttpRequest>() {
             @Override
-            public HttpResponse handle(HttpRequest data) {
-                if (!wavRecorderResponse.isRecording()){
+            public HttpResponse handle(HttpRequest request) {
+                boolean shouldStop = "false".equalsIgnoreCase(
+                        request.getQueryParamString("camEnabled", "false")
+                );
+                if (shouldStop){
+                    wavRecorderResponse.stopRecording();
+                    return null;
+                }
+
+                if (!wavRecorderResponse.isRecording()) {
                     wavRecorderResponse.startRecord();
                 }
                 return null;
             }
         });
 
-        serverHandler.beforeLiveJPEG(new WelandServerHandler.Handler<HttpRequest>() {
+        WelandServerHandler.Handler<HttpRequest> cameraStreamHandler = new WelandServerHandler.Handler<HttpRequest>() {
             @Override
             public HttpResponse handle(HttpRequest request) {
-                if (!camStreamResponse.isRecording()){
+                int newCameraIndex = request.getQueryParamInt("camIndex", 0);
+                int newLightMode = request.getQueryParamInt("lightMode", 0);
+                boolean shouldStop = "false".equalsIgnoreCase(
+                        request.getQueryParamString("camEnabled", "false")
+                );
+                if (shouldStop){
+                    camStreamResponse.stop();
+                    wavRecorderResponse.stopRecording();
+                    return null;
+                }
+
+                if (newLightMode != lightMode){
+                    camStreamResponse.stop();
+                    lightMode = newLightMode;
+                    cameraIndex = newCameraIndex;
+                    camStreamResponse.setCameraIndex(cameraIndex);
+                    camStreamResponse.setLightMode(lightMode);
+
+                }
+                else if (newCameraIndex != cameraIndex){
+                    cameraIndex = newCameraIndex;
+                    camStreamResponse.stop();
+                    camStreamResponse.setCameraIndex(cameraIndex);
+                }
+
+
+                if (!camStreamResponse.isRecording()) {
                     camStreamResponse.startStream();
                 }
                 return null;
             }
-        });
+        };
 
-        serverHandler.beforeLiveMJPEG(new WelandServerHandler.Handler<HttpRequest>() {
-            @Override
-            public HttpResponse handle(HttpRequest request) {
-                if (!camStreamResponse.isRecording()){
-                    camStreamResponse.startStream();
-                }
-                return null;
-            }
-        });
-
+        serverHandler.beforeLiveJPEG(cameraStreamHandler);
+        serverHandler.beforeLiveMJPEG(cameraStreamHandler);
 
         serverHandler.setContentHandler(new AndroidContentHandler(this));
-
-
-
-
-
-
-
     }
 
     @Nullable
@@ -128,10 +156,9 @@ public class ServerService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
 
-        if (intent == null){
+        if (intent == null) {
             log("onStartCommand from system");
-        }
-        else {
+        } else {
             log("onStartCommand from app");
         }
         Util.registerContext(getApplicationContext());
@@ -139,9 +166,10 @@ public class ServerService extends Service {
         return android.app.Service.START_STICKY;
     }
 
-    private void startServer(){
+    private void startServer() {
 
-        if (camStreamResponse != null){
+
+        if (camStreamResponse != null) {
             camStreamResponse.stop();
         }
 
@@ -184,9 +212,6 @@ public class ServerService extends Service {
         });
 
 
-
-
-
         //TODO remove this
 //        camStreamResponse.startStream();
         //Get a surface
@@ -199,55 +224,81 @@ public class ServerService extends Service {
 
     }
 
-    @Override
-    public void onDestroy() {
-        log("onDestroy");
-
-        if (wavRecorderResponse != null){
-            wavRecorderResponse.stopRecording();
-        }
-
-        if (camStreamResponse != null){
-            camStreamResponse.stop();
-        }
-        if (server != null){
-            server.stop();
-        }
 
 
-        Toast.makeText(this, "Server destroyed", Toast.LENGTH_LONG);
-        NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        mNotificationManager.cancel(NOTIFICATION_ID);
-        super.onDestroy();
-    }
+
 
     public void notify(Context context) {
 
         NotificationOps notificationOps = new NotificationOps()
-                .setSmallIcon(R.drawable.ic_all_out)
+                .setSmallIcon(R.drawable.ic_logo_no_back)
                 .setTitle("Laynee service runnig")
                 .setText("started at " + new Date())
                 .setChannelId(CHANNEL_ID)
                 .setChannelDescription("Laynee channel for server support")
                 .setId(NOTIFICATION_ID)
-                .setUncloseable();
+                .setFlags(Notification.FLAG_FOREGROUND_SERVICE)
+                ;
 
         Notification notification = RAPDUtils.createNotification(context, notificationOps);
 
 
         startForeground(NOTIFICATION_ID, notification);
+
+//        NotificationManager notificationManager = getSystemService(NotificationManager.class);
+
+
+
     }
 
 
+    IntentFilter batteryFilter = null;
+    BroadcastReceiver batteryReceiver = null;
 
-
-
+    SensorManager sensorManager = null;
+    SensorEventListener sensorEventListener = null;
 
     /**
      * this is called only once
      */
     @Override
     public void onCreate() {
+        if (AppUtil.contentInfoProvider.noFilesScanned()) {
+            AppUtil.contentInfoProvider.get();
+        }
+
+        try {
+            if (batteryFilter == null){
+                batteryFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+
+                if (batteryReceiver == null){
+                    batteryReceiver = new BroadcastReceiver() {
+                        @Override
+                        public void onReceive(Context context, Intent i) {
+                            int s = i.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+                            int l = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+                            DeviceStat.getInstance().setBatteryLevel(l).setBatteryScale(s);
+                        }
+                    };
+                }
+                getApplicationContext().registerReceiver(batteryReceiver, batteryFilter);
+            }
+
+            if (sensorManager == null){
+                sensorManager = (SensorManager) getApplicationContext().getSystemService(Context.SENSOR_SERVICE);
+
+            }
+
+            if (sensorEventListener == null){
+                sensorEventListener = new SensorReader();
+            }
+            SensorReader.readInit(sensorManager, sensorEventListener);
+
+
+        } catch (Exception e){
+            log.e(e);
+        }
+
         startServer();
         log("ON CREATE");
 
@@ -256,7 +307,52 @@ public class ServerService extends Service {
     }
 
 
-    private void log(String text){
+    @Override
+    public void onDestroy() {
+        log("onDestroy");
+
+        if (wavRecorderResponse != null) {
+            wavRecorderResponse.stopRecording();
+        }
+
+        if (camStreamResponse != null) {
+            camStreamResponse.stop();
+        }
+        if (server != null) {
+            server.stop();
+        }
+        if (batteryFilter != null){
+            try {
+                getApplicationContext().unregisterReceiver(batteryReceiver);
+            }catch (Exception e){
+
+            }
+        }
+
+        if (sensorManager != null){
+            sensorManager.unregisterListener(sensorEventListener);
+        }
+
+
+        Toast.makeText(this, "Server destroyed", Toast.LENGTH_LONG);
+        NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        mNotificationManager.cancel(NOTIFICATION_ID);
+
+//        BackgroundPlayer.INSTANCE.stop();
+        super.onDestroy();
+    }
+
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+
+        super.onTaskRemoved(rootIntent);
+        String ns = Context.NOTIFICATION_SERVICE;
+        NotificationManager nMgr = (NotificationManager) getSystemService(ns);
+        nMgr.cancelAll();
+    }
+
+    private void log(String text) {
         log.info(".........................................SRVLOG\n " + text + "\n\n\n\n");
     }
 

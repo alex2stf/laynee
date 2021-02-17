@@ -9,34 +9,48 @@ import android.widget.TextView;
 
 import com.arise.core.tools.CollectionUtil;
 import com.arise.core.tools.Mole;
+import com.arise.core.tools.ThreadUtil;
 import com.arise.core.tools.models.CompleteHandler;
 import com.arise.rapdroid.media.server.AppUtil;
 import com.arise.rapdroid.media.server.Icons;
-import com.arise.rapdroid.media.server.WelandClient;
+import com.arise.weland.WelandClient;
 import com.arise.weland.dto.ContentInfo;
 import com.arise.weland.dto.ContentPage;
 import com.arise.rapdroid.media.server.views.MediaDisplayer;
 import com.arise.rapdroid.media.server.views.MediaIcon;
+import com.arise.weland.dto.RemoteConnection;
 
+import java.net.ConnectException;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
+
+//@Deprecated
 public class ContentInfoDisplayer extends MediaDisplayer {
-    private final Object worker;
-    private final String playlistId;
     private static final Mole log = Mole.getInstance(ContentInfoDisplayer.class);
+    private static final int MIN_INIT_DATA_SIZE = 20;
+    private static final int RETRY_TIMEOUT = 1000;
+    private static final int MAX_RETRIES = 105 * RETRY_TIMEOUT;
+    final Object worker;
+    private final String playlistId;
+    private final RemoteConnection remoteConnection;
+    BlockingQueue<MediaIcon> icons = new LinkedBlockingQueue<>();
+    volatile boolean checking = false;
     private Integer currentIndex = 0;
     private volatile boolean isFetching;
+
+
+
     private volatile int dataLoadedLength = 0;
-    private static final int MIN_INIT_DATA_SIZE = 20;
+    private volatile int connectRetries = 1000 * 5;
 
-//    private AutoplayMode autoplayMode = AutoplayMode.off;
-//    MenuItem autoplayMenuItem;
 
-    public ContentInfoDisplayer(Context context, int defaultRes, Object worker, String playlistId, String title) {
+
+    public ContentInfoDisplayer(Context context, int defaultRes, RemoteConnection remoteConnection, String playlistId, String title) {
         super(context, defaultRes);
-        this.worker = worker;
+        this.remoteConnection = remoteConnection;
+        this.worker = remoteConnection.getPayload();
         this.playlistId = playlistId;
 
         gridView.setOnScrollListener(new AbsListView.OnScrollListener() {
@@ -59,21 +73,6 @@ public class ContentInfoDisplayer extends MediaDisplayer {
 
 
 
-        addOption(new Option() {
-            @Override
-            public String getTitle(ContentInfo info) {
-                return "Play";
-            }
-
-            @Override
-            public void onClick(ContentInfo info) {
-                WelandClient.openFile(info, worker);
-                if (!isFetching && currentIndex != null){
-                    log.info("CLICK FETCH " + playlistId);
-                    fetchData();
-                }
-            }
-        });
 
         addOption(new Option() {
             @Override
@@ -82,10 +81,10 @@ public class ContentInfoDisplayer extends MediaDisplayer {
             }
 
             @Override
-            public void onClick(ContentInfo info) {
+            public void onClick(ContentInfo info, MediaDisplayer displayer) {
                 AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
                 builder.setTitle(info.getTitle());
-                TextView textView =new TextView(getContext());
+                TextView textView = new TextView(getContext());
                 textView.setText(info.getPath() + "\n" + info.getThumbnailId());
                 builder.setView(textView);
                 builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
@@ -99,19 +98,25 @@ public class ContentInfoDisplayer extends MediaDisplayer {
         });
 
 
-
-
-
-
     }
 
 
+    @Override
+    public String getPlaylistId() {
+        return playlistId;
+    }
 
+    @Override
+    public RemoteConnection getRemoteConnection() {
+        return remoteConnection;
+    }
 
-
-
-
-
+    public void retryFetch(){
+        if (!isFetching && currentIndex != null){
+            log.info("CLICK FETCH " + playlistId);
+            fetchData();
+        }
+    }
 
     @Override
     protected void onMediaIconClick(MediaIcon icon) {
@@ -120,9 +125,6 @@ public class ContentInfoDisplayer extends MediaDisplayer {
             fetchData();
         }
     }
-
-
-
 
     private void fetchData(){
         isFetching = true;
@@ -133,8 +135,8 @@ public class ContentInfoDisplayer extends MediaDisplayer {
                 currentIndex = data.getIndex();
                 dataLoadedLength += batch.size();
 //                log.info("CURRENT_INDEX = " + currentIndex + " from "
-//                        + WelandClient.getWorkerId(worker) + "/" + playlistId + " data loaded: " + dataLoadedLength +
-//                        " autoplay mode " + data.getAutoplayMode());
+//                        + WelandClient.getWorkerId(worker) + playlistId + " data loaded: " + dataLoadedLength);
+                connectRetries = (connectRetries - RETRY_TIMEOUT > RETRY_TIMEOUT ? connectRetries - RETRY_TIMEOUT : RETRY_TIMEOUT);
                 if (!CollectionUtil.isEmpty(batch)){
 
                     addBatch(batch, new CompleteHandler<Object>() {
@@ -149,14 +151,16 @@ public class ContentInfoDisplayer extends MediaDisplayer {
                             }
                         }
                     });
+
                 }
                 else if (currentIndex != null && dataLoadedLength < MIN_INIT_DATA_SIZE){
-                    log.info("VALID BUT EMPTY LIST RESPONSE for " +playlistId +", retry in 1 millisecond");
+                    log.info("VALID BUT EMPTY LIST RESPONSE for " +playlistId +", retry in " + connectRetries + " millisecond");
                     try {
-                        Thread.sleep(1000);
+                        Thread.sleep(connectRetries);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
+                    connectRetries+= RETRY_TIMEOUT;
                     fetchData();
                 }
                 else {
@@ -172,12 +176,18 @@ public class ContentInfoDisplayer extends MediaDisplayer {
                 if(dataLoadedLength < MIN_INIT_DATA_SIZE && "RETRY".equals(data)){
                     fetchData();
                 }
+                else if (data instanceof ConnectException && dataLoadedLength < MIN_INIT_DATA_SIZE && connectRetries < MAX_RETRIES){
+                    try {
+                        Thread.sleep(connectRetries);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    connectRetries+= RETRY_TIMEOUT;
+                    fetchData();
+                }
             }
         });
     }
-
-
-    BlockingQueue<MediaIcon> icons = new LinkedBlockingQueue<>();
 
     @Override
     protected void postIconBuild(MediaIcon mediaIcon) {
@@ -208,8 +218,6 @@ public class ContentInfoDisplayer extends MediaDisplayer {
             }
         });
     }
-
-    volatile boolean checking = false;
 
     private synchronized void checkIcons() {
 

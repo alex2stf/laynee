@@ -15,12 +15,13 @@ import androidx.annotation.NonNull;
 
 import com.arise.astox.net.clients.HttpClient;
 import com.arise.astox.net.models.http.HttpRequest;
-import com.arise.core.tools.CollectionUtil;
 import com.arise.core.tools.Mole;
+import com.arise.core.tools.StringUtil;
 import com.arise.core.tools.ThreadUtil;
 import com.arise.core.tools.Util;
+import com.arise.rapdroid.SmartWebView;
 import com.arise.rapdroid.media.server.R;
-import com.arise.rapdroid.media.server.WelandClient;
+import com.arise.weland.WelandClient;
 import com.arise.weland.dto.RemoteConnection;
 
 import java.io.IOException;
@@ -60,10 +61,13 @@ public class TouchPadView extends FrameLayout {
         start++;
         return val;
     }
-
-
+    SmartWebView controlView;
+    ImageButton ctrlBtn;
     public TouchPadView(@NonNull Context context) {
         super(context);
+
+        controlView = new SmartWebView(getContext(), SmartWebView.DEFAULT).init();
+
 
         colors = new int[colorsHex.length][colorsHex[0].length];
         for (int i = 0; i < colorsHex.length; i++){
@@ -94,12 +98,46 @@ public class TouchPadView extends FrameLayout {
             }
         });
 
+
+        ctrlBtn = new ImageButton(getContext());
+        ctrlBtn.setImageResource(R.drawable.ic_joystick);
+        ctrlBtn.setBackgroundResource(R.drawable.button_style_blue);
+        ctrlBtn.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (controlView.getVisibility() == VISIBLE){
+                    controlView.setVisibility(INVISIBLE);
+                    ctrlBtn.setImageResource(R.drawable.ic_joystick);
+                }
+                else {
+                    controlView.setVisibility(VISIBLE);
+                    ctrlBtn.setImageResource(R.drawable.ic_joystick_disabled);
+                }
+            }
+        });
+
+
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.leftMargin = 20;
         top.addView(clickBtn, params);
+        top.addView(ctrlBtn, params);
 
         addView(drawingView, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        addView(controlView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        controlView.setVisibility(INVISIBLE);
+
         addView(top, new LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+
+
+    }
+
+    public void showControlView(){
+        if (controlView != null){
+            controlView.setVisibility(VISIBLE);
+            ctrlBtn.setImageResource(R.drawable.ic_joystick_disabled);
+        }
     }
 
 
@@ -115,6 +153,11 @@ public class TouchPadView extends FrameLayout {
         this.connection = connection;
         communicator = new NetworkCommunicator(connection.getPayload());
         drawingView.setHandler(communicator);
+        if (connection.getPayload() instanceof URI){
+            URI uri = (URI) connection.getPayload();
+            String str = uri.toString();
+            controlView.loadUrl(str + "/kontrols");
+        }
     }
 
     public void unLockedIcon() {
@@ -129,8 +172,8 @@ public class TouchPadView extends FrameLayout {
         private final Object payload;
         BluetoothSocket bluetoothSocket;
         Socket httpSocket;
-        Thread asyncThread = null;
-        String state = "unset";
+        volatile Thread asyncThread = null;
+        volatile String state = "unset";
         float px, py;
         float startX = 0;
         float startY = 0;
@@ -144,6 +187,7 @@ public class TouchPadView extends FrameLayout {
                 asyncThread = new Thread(this);
                 asyncThread.start();
             }
+
         }
 
         void stopThread(){
@@ -158,10 +202,11 @@ public class TouchPadView extends FrameLayout {
 
         @Override
         public void onActionDown(DrawingView drawingView, MotionEvent event) {
-            startThread();
+
             state = "action_down";
             startX =  event.getX();
             startY =  event.getY();
+            startThread();
         }
 
         @Override
@@ -202,13 +247,14 @@ public class TouchPadView extends FrameLayout {
             if (httpSocket != null){
                 try {
                     httpSocket.getOutputStream().write(bytes);
+                    state = "http_lock";
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
             }
         }
 
-        private void connect() {
+        public void connect() {
             HttpRequest request = new HttpRequest().setMethod("GET").setUri(">w=0");
             if (payload instanceof BluetoothDevice && bluetoothSocket == null){
                 try {
@@ -230,6 +276,7 @@ public class TouchPadView extends FrameLayout {
                 }
             }
         }
+
 
         @Override
         public void run() {

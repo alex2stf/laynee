@@ -1,16 +1,13 @@
 package com.arise.rapdroid.media.server.fragments;
 
 import android.content.res.Configuration;
-import android.graphics.Bitmap;
 import android.graphics.Color;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ImageView;
 import android.widget.RelativeLayout;
 
 import androidx.annotation.NonNull;
@@ -18,22 +15,23 @@ import androidx.annotation.Nullable;
 
 import com.arise.core.tools.AppCache;
 import com.arise.core.tools.Mole;
-import com.arise.core.tools.StringUtil;
 import com.arise.core.tools.ThreadUtil;
+import com.arise.rapdroid.components.ContextFragment;
 import com.arise.rapdroid.components.MediaControls;
 import com.arise.rapdroid.media.server.AppUtil;
-import com.arise.rapdroid.media.server.BackgroundPlayer;
 import com.arise.rapdroid.media.server.MainActivity;
 import com.arise.rapdroid.media.server.R;
-import com.arise.weland.dto.ContentInfo;
-import com.arise.rapdroid.components.ContextFragment;
 import com.arise.rapdroid.media.server.views.MyVideoView;
+import com.arise.weland.dto.ContentInfo;
 import com.arise.weland.dto.Playlist;
+import com.arise.weland.utils.AppSettings;
 
+import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
 import static com.arise.rapdroid.media.server.AppUtil.PLAYBACK_STATE;
+import static com.arise.rapdroid.media.server.AppUtil.contentInfoProvider;
 
 public class MediaPlaybackFragment extends ContextFragment {
 
@@ -42,49 +40,36 @@ public class MediaPlaybackFragment extends ContextFragment {
 
 
     private static final Mole log = Mole.getInstance(MediaPlaybackFragment.class);
-    static int PLAYING_MUSIC = 1;
-    static int PLAYING_VIDEO = 2;
-    static int PAUSED_MUSIC = 3;
-    static int PAUSED_VIDEO = 4;
-    static int STOPPED = 5;
+    static int PLAYING = 1;
+    static int STOPPED_BY_USER = 3;
+    static int MEDIA_COMPLETED = 5;
 
-    private final BackgroundPlayer musicPlayer = BackgroundPlayer.INSTANCE;
-    ImageView musicImage;
+
+
+
+//    ImageView musicImage;
+    ThumbnailView thumbnailView;
     MyVideoView videoView;
     RelativeLayout root;
     ThreadUtil.TimerResult updateTimer;
+
     ContentInfo currentInfo;
-    int state;
+
     MediaControls mediaControls;
+    Map<String, Drawable> arts = new HashMap<>();
+    int controlsHideCnt = 0;
 
 
-    MediaPlayer.OnCompletionListener onCompletionListener = new MediaPlayer.OnCompletionListener() {
+
+    View.OnClickListener showControls = new View.OnClickListener() {
         @Override
-        public void onCompletion(MediaPlayer local) {
-            videoView.stopPlayback();
-            musicPlayer.stop();
-            ThreadUtil.closeTimer(updateTimer);
-            updateSeekBar();
-            if (currentInfo != null) {
-                currentInfo.setPosition(0);
-            }
-            clearState();
-            state = STOPPED;
+        public void onClick(View view) {
             showMediaControls();
-            AppCache.putInt("playback-state", state);
-            if (AppUtil.isAutoplayVideos()){
-                startVideosAutoplay();
-            }
-            else if (AppUtil.isAutoplayMusic()){
-                startMusicAutoplay();
-            }
         }
     };
-    Map<String, Drawable> arts = new HashMap<>();
+    private int numErrors =  0;
 
-    public void setMediaCenter(MediaCenterFragment mediaCenterFragment) {
-        mediaCenterFragment.setMediaPlaybackFragment(this);
-    }
+
 
     public void showVideoFragment(){
         if (getActivity() != null && getActivity() instanceof MainActivity){
@@ -112,14 +97,6 @@ public class MediaPlaybackFragment extends ContextFragment {
 
     }
 
-    View.OnClickListener showControls = new View.OnClickListener() {
-        @Override
-        public void onClick(View view) {
-            showMediaControls();
-        }
-    };
-
-    int controlsHideCnt = 0;
     public void showMediaControls(){
         if (mediaControls != null){
             mediaControls.setVisibility(View.VISIBLE);
@@ -138,16 +115,13 @@ public class MediaPlaybackFragment extends ContextFragment {
            root.setOnClickListener(showControls);
            videoView = new MyVideoView(getContext());
            videoView.setOnClickListener(showControls);
-           musicImage = new ImageView(getContext());
-           musicImage.setImageResource(R.drawable.ic_tab_chat_disabled);
-           musicImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
-           musicImage.setOnClickListener(showControls);
+           thumbnailView = new ThumbnailView(getContext());
+
            root.addView(videoView);
            videoView.setLayoutParams(getParams());
-           root.addView(musicImage, new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+           root.addView(thumbnailView, new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
 
-//           mediaControls = inflater.inflate(R.layout.new_app_widget, null);
            mediaControls = new MediaControls(getContext(), 150);
 
 
@@ -171,14 +145,16 @@ public class MediaPlaybackFragment extends ContextFragment {
            mediaControls.getCentralButton().setOnClickListener(new View.OnClickListener() {
                @Override
                public void onClick(View view) {
-                   if (state == PLAYING_MUSIC || state == PLAYING_VIDEO){
-                       pausePlayer();
+
+                   int state = AppCache.getInt(PLAYBACK_STATE, MEDIA_COMPLETED);
+                   if (PLAYING == state){
+                       saveState();
+                       stopPlayer();
+                       AppCache.putInt(PLAYBACK_STATE, STOPPED_BY_USER);
+
                    }
-                   else if (state == PAUSED_MUSIC || state == PAUSED_VIDEO || state == STOPPED){
-                       resumePlayer();
-                   }
-                   else if (currentInfo != null){
-                       play(currentInfo);
+                   else {
+                       play(AppUtil.getSavedContentInfo());
                    }
                    showMediaControls();
                }
@@ -187,13 +163,6 @@ public class MediaPlaybackFragment extends ContextFragment {
            mediaControls.getLeftButton().setOnClickListener(new View.OnClickListener() {
                @Override
                public void onClick(View view) {
-                   if (AppUtil.isAutoplayMusic() || (currentInfo != null && currentInfo.isMusic())){
-                       play(AppUtil.contentInfoProvider.previous(Playlist.MUSIC));
-                   }
-
-                   else if (AppUtil.isAutoplayVideos() || (currentInfo != null && currentInfo.isVideo())){
-                       play(AppUtil.contentInfoProvider.previous(Playlist.VIDEOS));
-                   }
                    showMediaControls();
                }
            });
@@ -201,13 +170,9 @@ public class MediaPlaybackFragment extends ContextFragment {
            mediaControls.getRightButton().setOnClickListener(new View.OnClickListener() {
                @Override
                public void onClick(View view) {
-                   if (AppUtil.isAutoplayMusic() || (currentInfo != null && currentInfo.isMusic())){
-                       play(AppUtil.contentInfoProvider.nextFile(Playlist.MUSIC));
-                   }
-
-                   else if (AppUtil.isAutoplayVideos() || (currentInfo != null && currentInfo.isVideo())){
-                       play(AppUtil.contentInfoProvider.nextFile(Playlist.VIDEOS));
-                   }
+                   stopPlayer();
+                   AppCache.putInt(PLAYBACK_STATE, MEDIA_COMPLETED);
+                   startAutoPlayIfRequired();
                    showMediaControls();
                }
            });
@@ -219,83 +184,58 @@ public class MediaPlaybackFragment extends ContextFragment {
     }
 
     private void restoreMediaPlaybackFragment(){
-        currentInfo = AppUtil.contentInfoProvider.getCurrentInfo();
-        state = AppCache.getInt("playback-state", STOPPED);
-        if (currentInfo == null && musicPlayer.isPlaying()){
-            currentInfo = musicPlayer.getCurrentInfo();
-            state = PLAYING_MUSIC;
-            play(currentInfo);
-            return;
-        }
 
-        if (currentInfo == null){
-            return;
-        }
+        ContentInfo cInfo = AppUtil.getSavedContentInfo();
+        int state = AppCache.getInt(PLAYBACK_STATE, MEDIA_COMPLETED);
 
-        if (currentInfo.isMusic()){
-            if (state == PLAYING_MUSIC && musicPlayer.isPlaying(currentInfo)) {
-                play(currentInfo); //load handlers
-                showPauseButton();
-                updateSeekBar();
-                showVideoFragment();
-            }
-            else { //background music stopped by itself
-                state = STOPPED;
-                placeThumbnails(currentInfo);
-                showPlayButton();
-            }
-        }
-        else if(currentInfo.isVideo() ){
-            if (state == PLAYING_VIDEO || AppUtil.isAutoplayVideos()) {
-                play(currentInfo);
-                showVideoFragment();
-            }
+        if (cInfo != null  && PLAYING == state ){
+            play(cInfo);
+            showPauseButton();
+            updateSeekBar();
+            showVideoFragment();
         }
         else {
-            System.out.println("CURRENT INFO CANNOT BE PLAYED");
+           playNextOnRestore();
+        }
+
+    }
+
+    private void playNextOnRestore(){
+        if (AppCache.getInt(PLAYBACK_STATE, MEDIA_COMPLETED) == STOPPED_BY_USER){
+            stopPlayer();
+            return;
+        }
+
+        Playlist auto = AppSettings.getAutoPlaylist();
+        if (auto != null) {
+            ContentInfo next = contentInfoProvider.nextFile(auto);
+            if (next == null && !contentInfoProvider.finishedToScanAtLeastOnce()){
+                ThreadUtil.delayedTask(new Runnable() {
+                    @Override
+                    public void run() {
+                        playNextOnRestore();
+                    }
+                }, 2000);
+            }
+            else if (next != null){
+                play(next);
+            }
         }
     }
 
-    private void resumePlayer() {
-        ThreadUtil.closeTimer(updateTimer);
-        if (state == PAUSED_VIDEO) {
-            videoView.resume();
-            state = PLAYING_VIDEO;
-            showPauseButton();
-            startUpdateThread();
+    private void stopPlayer(){
+        videoView.setOnCompletionListener(null);
+        videoView.setOnPreparedListener(null);
+        if (videoView != null && videoView.isPlaying()){
+            videoView.stopPlayback();
         }
-        else if (state == PAUSED_MUSIC) {
-            musicPlayer.resume();
-            state = PLAYING_VIDEO;
-            showPauseButton();
-            startUpdateThread();
-        }
-        else if (state == STOPPED && currentInfo != null){
-            play(currentInfo);
-        }
-        else {
-            log.error("!!!!!!INVALID playback state " + state);
-            return;
-        }
-    }
-
-    private void pausePlayer(){
-
-        if (videoView.isPlaying()){
-            videoView.pause();
-            state = PAUSED_VIDEO;
-        } else {
-            musicPlayer.pause();
-            state = PAUSED_MUSIC;
-        }
-        AppCache.putInt(PLAYBACK_STATE, state);
         ThreadUtil.closeTimer(updateTimer);
         showPlayButton();
         saveState();
+
     }
 
     private void showPauseButton(){
-        AppCache.putInt(PLAYBACK_STATE, state);
         if (mediaControls != null){
             mediaControls.setCentralButtonImage(R.drawable.ic_pause);
             mediaControls.getCentralButton().setEnabled(true);
@@ -304,7 +244,6 @@ public class MediaPlaybackFragment extends ContextFragment {
     }
 
     private void showPlayButton(){
-        AppCache.putInt(PLAYBACK_STATE, state);
         if(mediaControls != null) {
             mediaControls.setCentralButtonImage(R.drawable.ic_play);
             mediaControls.getCentralButton().setEnabled(true);
@@ -312,64 +251,37 @@ public class MediaPlaybackFragment extends ContextFragment {
         updateSeekBar();
     }
 
-    private void setupMusicPlayerListeners(ContentInfo info){
-        musicPlayer.onCompletionListener(info.getPath(), new MediaPlayer.OnCompletionListener() {
-            @Override
-            public void onCompletion(MediaPlayer mediaPlayer) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        onCompletionListener.onCompletion(mediaPlayer);
-                    }
-                });
-            }
-        });
-
-        musicPlayer.onPreparedListener(info.getPath(), new MediaPlayer.OnPreparedListener() {
-            @Override
-            public void onPrepared(MediaPlayer mediaPlayer) {
-                currentInfo.setDuration(mediaPlayer.getDuration());
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        state = PLAYING_MUSIC;
-                        showPauseButton();
-                        saveState();
-                        startUpdateThread();
-                    }
-                });
-            }
-        });
+    private void clearStateAndPlayNextIfRequired(){
+        AppUtil.contentInfoProvider.clearState();
+        startAutoPlayIfRequired();
     }
 
-    public void play(ContentInfo info) {
+    private void startAutoPlayIfRequired(){
+        int state = AppCache.getInt(PLAYBACK_STATE, MEDIA_COMPLETED);
+        if (state == PLAYING || state == STOPPED_BY_USER){
+            return;
+        }
+        Playlist playlist = AppSettings.getAutoPlaylist();
+        if (playlist != null){
+            play(contentInfoProvider.nextFile(playlist));
+        }
+    }
+
+    public void play(final ContentInfo info) {
         if (info == null){
             return;
         }
-        currentInfo = info;
+        File f = new File(info.getPath());
+        if (!f.exists()){
+            return;
+        }
+
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                //first stop videoView
-                videoView.stopPlayback();
-
-                //music player:
-                if (info.isMusic()){
-                    if(!musicPlayer.isPlaying(info)){
-                        musicPlayer.play(info);
-                    }
-                    musicImage.setVisibility(View.VISIBLE);
-                    placeThumbnails(info);
-                    setupMusicPlayerListeners(info);
-                    log.info("setup music preview");
-                    videoView.setVisibility(View.INVISIBLE);
-                    return;
-                }
-
-                //video player:
-                musicImage.setVisibility(View.INVISIBLE);
+                currentInfo = null;
+                stopPlayer();
                 videoView.setVisibility(View.VISIBLE);
-                musicPlayer.destroy(); //destroy background music player
                 videoView.setLayoutParams(getParams());
                 int width = info.getWidth();
                 int height = info.getHeight();
@@ -382,33 +294,66 @@ public class MediaPlaybackFragment extends ContextFragment {
                 videoView.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
                     @Override
                     public void onPrepared(MediaPlayer mediaPlayer) {
-                        currentInfo.setDuration(mediaPlayer.getDuration());
+                        info.setDuration(mediaPlayer.getDuration());
                         int w = mediaPlayer.getVideoWidth();
                         int h = mediaPlayer.getVideoHeight();
                         if (w > 0 || h > 0){
                             videoView.setVideoSize(w, h);
                         }
-                        videoView.seekTo(currentInfo.getPosition());
+                        videoView.seekTo(info.getPosition());
                         videoView.start();
-                        state = PLAYING_VIDEO;
+                        AppCache.putInt(PLAYBACK_STATE, PLAYING);
+                        currentInfo = AppUtil.saveCurrentInfo(info);
+                        setupThumbnailViewIfRequired(info);
                         showPauseButton();
                         saveState();
                         startUpdateThread();
+                        showVideoFragment();
                     }
                 });
                 videoView.setOnErrorListener(new MediaPlayer.OnErrorListener() {
                     @Override
                     public boolean onError(MediaPlayer mediaPlayer, int i, int i1) {
                         log.error("ERROR DETECTED");
-                        return false;
+                        numErrors++;
+                        if (numErrors < 10){
+                            clearStateAndPlayNextIfRequired();
+                        } else {
+                            stopPlayer();
+                            AppCache.putInt(PLAYBACK_STATE, STOPPED_BY_USER);
+                            numErrors = 0;
+                        }
+                        return true;
                     }
                 });
-                videoView.setOnCompletionListener(onCompletionListener);
+                videoView.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                    @Override
+                    public void onCompletion(MediaPlayer mediaPlayer) {
+                        stopPlayer();
+                        updateSeekBar();
+                        clearState();
+                        showMediaControls();
+                        numErrors = 0;
+                        AppCache.putInt(PLAYBACK_STATE, MEDIA_COMPLETED);
+                        startAutoPlayIfRequired();
+                    }
+                });
                 videoView.setVideoPath(info.getPath());
                 updateSeekBar();
             } //exit main thread runnable
         });
 
+    }
+
+    private void setupThumbnailViewIfRequired(ContentInfo info) {
+        if (thumbnailView != null){
+            try {
+                thumbnailView.regenerate();
+                thumbnailView.setDisplayText(info.getName());
+            }catch (Exception ex){
+
+            }
+        }
     }
 
     private void startUpdateThread(){
@@ -420,26 +365,7 @@ public class MediaPlaybackFragment extends ContextFragment {
         }, 500);
     }
 
-    private void placeThumbnails(ContentInfo info) {
-        String artId = info.getThumbnailId();
-        if (!StringUtil.hasText(artId)){
-            return;
-        }
 
-        Drawable art = arts.get(artId);
-
-        if (art == null){
-            Bitmap bitmap = AppUtil.DECODER.getBitmapById(artId);
-            if (bitmap == null){
-                return;
-            }
-            art = new BitmapDrawable(getResources(), bitmap);
-            arts.put(artId, art);
-        }
-
-        musicImage.setImageDrawable(art);
-
-    }
 
 
 
@@ -451,14 +377,21 @@ public class MediaPlaybackFragment extends ContextFragment {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
+                    if (thumbnailView != null){
+                       try {
+                           thumbnailView.invalidate();
+                       }catch (Throwable t){
+
+                       }
+                    }
                     if (currentInfo != null && currentInfo.getPosition() > 0){
                         try {
                             if (controlsHideCnt > 10 && currentInfo.isVideo()){
                                 mediaControls.setVisibility(View.INVISIBLE);
                             }
                             else {
-                                mediaControls.setSeekBarMax(currentInfo.getDuration());
-                                mediaControls.setSeekBarProgress(currentInfo.getPosition());
+                                mediaControls.setSeekBarMax(videoView.getDuration());
+                                mediaControls.setSeekBarProgress(videoView.getCurrentPosition());
                             }
                             controlsHideCnt++;
                         } catch (Throwable t){
@@ -478,11 +411,13 @@ public class MediaPlaybackFragment extends ContextFragment {
     public void saveState() {
         if (videoView != null && currentInfo != null){
             try {
-               int newPosition = state == PLAYING_VIDEO ? videoView.getCurrentPosition() : musicPlayer.getCurrentPosition();
+
+               int newPosition = videoView.getCurrentPosition();
+
                if (newPosition > currentInfo.getPosition()){
-                   currentInfo.setPosition(newPosition);
-                   AppUtil.contentInfoProvider.saveState(currentInfo);
+                   AppUtil.saveCurrentInfo(currentInfo);
                }
+                currentInfo.setPosition(newPosition);
             } catch (Throwable t){
                 //may throw  java.lang.IllegalStateException
             }
@@ -499,27 +434,13 @@ public class MediaPlaybackFragment extends ContextFragment {
 
 
 
-    public void startVideosAutoplay() {
-        if (state != PLAYING_VIDEO) {
-            ContentInfo contentInfo = AppUtil.contentInfoProvider.nextFile(Playlist.VIDEOS);
-
-            if (contentInfo != null) {
-                play(contentInfo);
-            }
-        }
-        showVideoFragment();
-    }
 
 
-    public void startMusicAutoplay() {
 
-        if (state != PLAYING_MUSIC && !musicPlayer.isPlaying()) {
-            ContentInfo contentInfo = AppUtil.contentInfoProvider.nextFile(Playlist.MUSIC);
-            if (contentInfo != null) {
-                play(contentInfo);
-            }
-        }
 
-        showVideoFragment();
+
+    public void stop() {
+        stopPlayer();
+        AppCache.putInt(PLAYBACK_STATE, STOPPED_BY_USER);
     }
 }

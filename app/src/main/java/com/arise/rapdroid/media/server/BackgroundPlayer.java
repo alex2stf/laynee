@@ -4,20 +4,22 @@ import android.media.MediaPlayer;
 import android.media.MediaPlayer.OnCompletionListener;
 import android.media.MediaPlayer.OnPreparedListener;
 
+import com.arise.core.tools.Mole;
 import com.arise.weland.dto.ContentInfo;
 import com.arise.weland.dto.Playlist;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import javax.xml.transform.ErrorListener;
+import static com.arise.weland.utils.AppSettings.isAutoplayMusic;
 
+
+@Deprecated
 public enum BackgroundPlayer {
     INSTANCE;
 
@@ -27,31 +29,33 @@ public enum BackgroundPlayer {
     Set<String> completePending = Collections.synchronizedSet(new HashSet<>());
     Set<String> preparedPending = Collections.synchronizedSet(new HashSet<>());
 
-    public BackgroundPlayer onCompletionListener(String id, OnCompletionListener onCompletionListener) {
-        if (mediaPlayer == null){
-            return this;
-        }
-        if (completePending.contains(id)){
-            onCompletionListener.onCompletion(mediaPlayer);
-        }
-        else {
-            completeMap.put(id, onCompletionListener);
-        }
-        return this;
-    }
+    private static final Mole log = Mole.getInstance("deprecated");
 
-    public BackgroundPlayer onPreparedListener(String id, OnPreparedListener onPreparedListener) {
-        if (mediaPlayer == null){
-            return this;
-        }
-        if (preparedPending.contains(id)){
-            onPreparedListener.onPrepared(mediaPlayer);
-        }
-        else {
-            preparedMap.put(id, onPreparedListener);
-        }
-        return this;
-    }
+//    public BackgroundPlayer onCompletionListener(String id, OnCompletionListener onCompletionListener) {
+//        if (mediaPlayer == null){
+//            return this;
+//        }
+//        if (completePending.contains(id)){
+//            onCompletionListener.onCompletion(mediaPlayer);
+//        }
+//        else {
+//            completeMap.put(id, onCompletionListener);
+//        }
+//        return this;
+//    }
+
+//    public BackgroundPlayer onPreparedListener(String id, OnPreparedListener onPreparedListener) {
+//        if (mediaPlayer == null){
+//            return this;
+//        }
+//        if (preparedPending.contains(id)){
+//            onPreparedListener.onPrepared(mediaPlayer);
+//        }
+//        else {
+//            preparedMap.put(id, onPreparedListener);
+//        }
+//        return this;
+//    }
 
     MediaPlayer createInstance(){
         if (mediaPlayer == null){
@@ -82,8 +86,8 @@ public enum BackgroundPlayer {
         mediaPlayer.setOnCompletionListener(new OnCompletionListener() {
             @Override
             public void onCompletion(MediaPlayer mediaPlayer) {
-                if (AppUtil.isAutoplayMusic()) {
-                    ContentInfo contentInfo = AppUtil.contentInfoProvider.next(Playlist.MUSIC);
+                if (isAutoplayMusic()) {
+                    ContentInfo contentInfo = AppUtil.contentInfoProvider.nextFile(Playlist.MUSIC);
                     play(contentInfo);
                 }
 
@@ -115,7 +119,12 @@ public enum BackgroundPlayer {
             e.printStackTrace();
         }
 
-        mediaPlayer.prepareAsync();
+       try {
+           mediaPlayer.prepareAsync();
+       }catch (Exception e){
+           e.printStackTrace();
+           log.error("Failed to prepare media player ", e);
+       }
     }
 
     public void stop() {
@@ -176,7 +185,7 @@ public enum BackgroundPlayer {
             if (info == null){
                 File f = new File(currentId);
                 if (f.exists()) {
-                    info = AppUtil.DECODER.decodeFile(f);
+                    info = AppUtil.DECODER.decode(f);
                 }
             }
         }

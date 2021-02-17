@@ -20,6 +20,7 @@ import android.widget.SearchView;
 import android.widget.TextView;
 
 import com.arise.core.tools.CollectionUtil;
+import com.arise.core.tools.ContentType;
 import com.arise.core.tools.Mole;
 import com.arise.core.tools.StringUtil;
 import com.arise.core.tools.models.CompleteHandler;
@@ -30,6 +31,7 @@ import com.arise.rapdroid.media.server.R;
 import com.arise.weland.dto.ContentInfo;
 import com.arise.rapdroid.components.ui.Layouts;
 import com.arise.rapdroid.components.ui.adapters.ListViewAdapter;
+import com.arise.weland.dto.RemoteConnection;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,7 +43,7 @@ import java.util.Set;
 /**
  * https://live.rockfm.ro:8443/rockfm.aacp
  */
-public class MediaDisplayer extends LinearLayout {
+public abstract class MediaDisplayer extends LinearLayout {
 
     private final Context context;
     private final int defaultRes;
@@ -53,6 +55,9 @@ public class MediaDisplayer extends LinearLayout {
     LinearLayout top;
     LinearLayout topLeft;
 
+    public Object getWorker(){
+        return getRemoteConnection().getPayload();
+    };
 
 
     public MediaDisplayer(Context context, int defaultRes) {
@@ -185,6 +190,7 @@ public class MediaDisplayer extends LinearLayout {
 
 
     public MediaDisplayer setTitle(String text, int textColor) {
+       // text = text.length() > 7 ? text.substring(0, 7) : text;
         title = new TextView(getContext());
         title.setText(text);
         title.setGravity(Gravity.CENTER_VERTICAL);
@@ -193,7 +199,7 @@ public class MediaDisplayer extends LinearLayout {
 //        title.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
         title.setPadding(0, 0, 20, 0);
 
-        topLeft.addView(title, Layouts.wrapContentMatchParent()); //TODO optional
+        topLeft.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 0.5f)); //TODO optional
         return this;
     }
 
@@ -203,7 +209,7 @@ public class MediaDisplayer extends LinearLayout {
         menuBtn.setBackgroundColor(Color.TRANSPARENT);
 
         popupMenu = new PopupMenu(context, menuBtn);
-        popupMenu.getMenu().add("Size");
+
 
         popupMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
             @Override
@@ -227,9 +233,14 @@ public class MediaDisplayer extends LinearLayout {
                 popupMenu.show();
             }
         });
-        topLeft.addView(menuBtn);
+        menuBtn.setPadding(0, 0, 20, 0);
+        topLeft.addView(menuBtn, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT, 0.5f));
         return this;
     }
+
+    public abstract String getPlaylistId();
+
+    public abstract RemoteConnection getRemoteConnection();
 
 
     public  interface OnMenuClickListener {
@@ -249,7 +260,13 @@ public class MediaDisplayer extends LinearLayout {
     private static final Mole log = Mole.getInstance(MediaDisplayer.class);
 
     MediaIcon buildIcon(ContentInfo mediaInfo){
-        MediaIcon mediaIcon = new MediaIcon(context, mediaInfo, defaultRes, 420);
+        int icon = defaultRes;
+        ContentType contentType = ContentType.search(mediaInfo.getExt());
+        if (contentType != null && contentType.getResId() > 0){
+            icon = contentType.getResId();
+        }
+
+        MediaIcon mediaIcon = new MediaIcon(context, mediaInfo, icon, 420);
 //        mediaIcon.setOnClickListener(new OnClickListener() {
 //            @Override
 //            public void onClick(View view) {
@@ -267,6 +284,7 @@ public class MediaDisplayer extends LinearLayout {
 
 
     AlertDialog buildDialog(MediaIcon icon){
+        final MediaDisplayer self = this;
         String titles[] = new String[options.size()];
         for (int i = 0; i < titles.length; i++){
             titles[i] = options.get(i).getTitle(icon.getMediaInfo());
@@ -276,7 +294,7 @@ public class MediaDisplayer extends LinearLayout {
         builder.setItems(titles, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialogInterface, int i) {
-                options.get(i).onClick(icon.getMediaInfo());
+                options.get(i).onClick(icon.getMediaInfo(), self);
             }
         });
         AlertDialog dialog = builder.create();
@@ -334,6 +352,6 @@ public class MediaDisplayer extends LinearLayout {
 
     public interface Option {
         String getTitle(ContentInfo info);
-        void onClick(ContentInfo info);
+        void onClick(ContentInfo info, MediaDisplayer displayer);
     }
 }

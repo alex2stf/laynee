@@ -15,11 +15,10 @@ import com.arise.rapdroid.media.server.AppUtil;
 import com.arise.rapdroid.media.server.Icons;
 import com.arise.rapdroid.media.server.MainActivity;
 import com.arise.rapdroid.media.server.R;
-import com.arise.rapdroid.media.server.WelandClient;
+import com.arise.weland.WelandClient;
 import com.arise.rapdroid.media.server.appviews.SettingsView;
 import com.arise.rapdroid.media.server.appviews.WallView;
 import com.arise.weland.dto.DTOUtil;
-import com.arise.weland.dto.DeviceStat;
 import com.arise.weland.dto.Message;
 import com.arise.weland.dto.RemoteConnection;
 import com.arise.weland.utils.WelandServerHandler;
@@ -32,6 +31,8 @@ import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
+
+@Deprecated
 public class ChatFragment extends ContextFragment implements ConversationView.SelectHandler, ConversationView.SendHandler
 {
 
@@ -116,15 +117,15 @@ public class ChatFragment extends ContextFragment implements ConversationView.Se
 //        }
     }
 
-    public ChatFragment setMainActivity(MainActivity mainActivity) {
-        this.mainActivity = mainActivity;
-        return this;
-    }
+//    public ChatFragment setMainActivity(MainActivity mainActivity) {
+//        this.mainActivity = mainActivity;
+//        return this;
+//    }
 
-    public ChatFragment setSettingsView(SettingsView settingsView) {
-        this.settingsView = settingsView;
-        return this;
-    }
+//    public ChatFragment setSettingsView(SettingsView settingsView) {
+//        this.settingsView = settingsView;
+//        return this;
+//    }
 
     @Override
     public boolean onSend(String text, ConversationView conversationView) {

@@ -20,9 +20,7 @@ public class Icons {
 
 
 
-    public static int getDefaultInfoThumbnail() {
-        return android.R.drawable.ic_menu_help;
-    }
+
 
 
 

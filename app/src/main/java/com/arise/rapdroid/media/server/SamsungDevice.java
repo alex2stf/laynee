@@ -30,6 +30,7 @@ public class SamsungDevice {
                         @Override
                         public void onSuccess(Device device) {
                             System.out.println(device.getPlatform());
+
 //                            device.getApp
 
 

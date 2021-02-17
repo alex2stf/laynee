@@ -6,7 +6,6 @@ import android.content.DialogInterface;
 import android.graphics.Color;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -15,20 +14,14 @@ import com.arise.core.tools.Mole;
 import com.arise.core.tools.StringUtil;
 import com.arise.core.tools.models.CompleteHandler;
 import com.arise.rapdroid.components.ui.Layouts;
-import com.arise.rapdroid.media.server.AppUtil;
-import com.arise.rapdroid.media.server.MainActivity;
 import com.arise.rapdroid.media.server.R;
-import com.arise.rapdroid.media.server.WelandClient;
+import com.arise.weland.WelandClient;
 import com.arise.rapdroid.media.server.views.ConversationView;
-import com.arise.weland.dto.DTOUtil;
 import com.arise.weland.dto.Message;
 import com.arise.weland.dto.RemoteConnection;
 import com.arise.weland.utils.WelandServerHandler;
 
-import java.util.Set;
 import java.util.UUID;
-
-import static com.arise.weland.dto.DTOUtil.WALL_RESERVED_ID;
 
 public class WallView extends ConversationView {
     private final SettingsView settingsView;
